@@ -78,8 +78,18 @@ create table viandas (
   created_at timestamptz not null default now()
 );
 
+create table interesados_viandera (
+  id uuid primary key default gen_random_uuid(),
+  nombre text not null,
+  contacto text not null,
+  zona text,
+  mensaje text,
+  created_at timestamptz not null default now()
+);
+
 alter table vianderas enable row level security;
 alter table viandas enable row level security;
+alter table interesados_viandera enable row level security;
 
 create policy "vianderas activas son publicas"
   on vianderas for select
@@ -88,12 +98,23 @@ create policy "vianderas activas son publicas"
 create policy "viandas disponibles son publicas"
   on viandas for select
   using (disponible = true);
+
+create policy "cualquiera puede anotarse como interesada"
+  on interesados_viandera for insert
+  to anon
+  with check (true);
 ```
 
 `tipo` en `viandas` modela el filtro de la home: **Almuerzo**, **Cena** o **Ambos**.
+`interesados_viandera` es la lista de espera de la landing: sin policy de `select`
+para `anon` a propósito (los leads solo se ven desde el dashboard de Supabase con
+la cuenta del proyecto), solo `insert` público vía el formulario.
 
 ## Estado del proyecto
 
-Primera iteración: home page pública (mapa de Rafaela + filtros + empty state de
-lista de viandas). Sin autenticación todavía. Sin datos reales cargados — el mapa
-se muestra sin markers hasta que existan vianderas activas.
+Pivot a landing page (2026-08-20): antes de tener vianderas reales, un mapa vacío
+no genera valor. La home ahora es una landing que explica el proyecto y termina en
+un formulario que suma interesadas a `interesados_viandera` vía Server Action
+(`app/(consumer)/actions.ts`). El mapa/filtros/lista de viandas siguen en el
+código (`components/map`, `components/viandas`) para cuando haya datos reales,
+pero no se renderizan en la home por ahora. Sin autenticación todavía.

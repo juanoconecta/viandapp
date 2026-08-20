@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Link from "next/link";
 import Header from "@/components/layout/Header";
 import "./globals.css";
 
@@ -32,9 +31,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <footer className="border-t border-black/10 py-6">
           <div className="mx-auto flex max-w-6xl flex-col items-center gap-2 px-4 text-sm text-neutral-500 sm:flex-row sm:justify-between sm:px-6">
             <p>viandapp © 2026 — Rafaela, Santa Fe</p>
-            <Link href="/productores" className="text-coral hover:text-coral-600">
+            <a href="#sumate" className="text-coral hover:text-coral-600">
               ¿Hacés viandas? Sumarte →
-            </Link>
+            </a>
           </div>
         </footer>
       </body>

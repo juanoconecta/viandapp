@@ -14,12 +14,12 @@ export default function Header() {
         </Link>
 
         <nav className="flex items-center gap-4 sm:gap-6">
-          <Link
-            href="/productores"
+          <a
+            href="#sumate"
             className="hidden text-sm font-medium text-neutral-600 hover:text-neutral-900 sm:block"
           >
             Sumarte como viandera
-          </Link>
+          </a>
           <Link
             href="/login"
             className="rounded-full bg-coral px-4 py-2 text-sm font-medium text-white hover:bg-coral-600"
