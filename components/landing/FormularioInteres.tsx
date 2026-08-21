@@ -80,17 +80,32 @@ export default function FormularioInteres() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="zona" className="text-sm font-medium text-ink/80">
-            Zona o barrio <span className="text-ink/40">(opcional)</span>
-          </label>
-          <input
-            id="zona"
-            name="zona"
-            type="text"
-            className={campoClase}
-            placeholder="Ej: Barrio Fátima"
-          />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="zona" className="text-sm font-medium text-ink/80">
+              Zona o barrio <span className="text-ink/40">(opcional)</span>
+            </label>
+            <input
+              id="zona"
+              name="zona"
+              type="text"
+              className={campoClase}
+              placeholder="Ej: Barrio Fátima"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="instagram" className="text-sm font-medium text-ink/80">
+              Instagram <span className="text-ink/40">(opcional)</span>
+            </label>
+            <input
+              id="instagram"
+              name="instagram"
+              type="text"
+              className={campoClase}
+              placeholder="@tu_usuario"
+            />
+          </div>
         </div>
 
         <div className="flex flex-col gap-1.5">

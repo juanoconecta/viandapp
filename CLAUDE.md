@@ -111,6 +111,7 @@ create table interesados_viandera (
   nombre text not null,
   contacto text not null,
   zona text,
+  instagram text,
   mensaje text,
   created_at timestamptz not null default now()
 );

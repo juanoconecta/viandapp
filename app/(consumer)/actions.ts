@@ -14,6 +14,7 @@ export async function anotarseComoInteresada(
   const nombre = String(formData.get("nombre") ?? "").trim();
   const contacto = String(formData.get("contacto") ?? "").trim();
   const zona = String(formData.get("zona") ?? "").trim();
+  const instagram = String(formData.get("instagram") ?? "").trim();
   const mensaje = String(formData.get("mensaje") ?? "").trim();
 
   if (!nombre || !contacto) {
@@ -26,6 +27,7 @@ export async function anotarseComoInteresada(
     nombre,
     contacto,
     zona: zona || null,
+    instagram: instagram || null,
     mensaje: mensaje || null,
   });
 

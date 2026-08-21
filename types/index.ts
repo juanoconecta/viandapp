@@ -28,6 +28,7 @@ export type InteresadoViandera = {
   nombre: string;
   contacto: string;
   zona: string | null;
+  instagram: string | null;
   mensaje: string | null;
   created_at: string;
 };
