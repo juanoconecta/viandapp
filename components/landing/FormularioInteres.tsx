@@ -2,7 +2,11 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
+import { motion } from "motion/react";
 import { anotarseComoInteresada } from "@/app/(consumer)/actions";
+
+const campoClase =
+  "rounded-xl border border-ink/15 bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink/35 transition-colors focus:border-coral focus:outline-none focus:ring-2 focus:ring-coral/25";
 
 function BotonEnviar() {
   const { pending } = useFormStatus();
@@ -11,7 +15,7 @@ function BotonEnviar() {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-full bg-coral px-6 py-3 text-sm font-medium text-white hover:bg-coral-600 disabled:cursor-not-allowed disabled:opacity-60"
+      className="rounded-full bg-coral px-6 py-3 text-sm font-medium text-white shadow-md shadow-coral/20 transition-all hover:-translate-y-0.5 hover:bg-coral-600 hover:shadow-lg disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
     >
       {pending ? "Enviando..." : "Quiero anotarme"}
     </button>
@@ -25,80 +29,92 @@ export default function FormularioInteres() {
 
   if (estado.status === "ok") {
     return (
-      <div className="rounded-2xl border border-teal/30 bg-teal/5 p-6 text-center">
-        <p className="font-medium text-teal">¡Listo, ya estás anotada!</p>
-        <p className="mt-1 text-sm text-neutral-600">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+        className="flex flex-col items-center gap-2 rounded-3xl border border-ink/10 bg-card p-6 py-10 text-center shadow-sm sm:p-8"
+      >
+        <span className="text-4xl">🎉</span>
+        <p className="font-display text-lg font-semibold text-teal">
+          ¡Listo, ya estás anotada!
+        </p>
+        <p className="text-sm text-ink/60">
           Te vamos a contactar apenas abramos tu zona en Rafaela.
         </p>
-      </div>
+      </motion.div>
     );
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-4">
-      <div className="grid gap-4 sm:grid-cols-2">
+    <div className="rounded-3xl border border-ink/10 bg-card p-6 shadow-sm sm:p-8">
+      <form action={formAction} className="flex flex-col gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="nombre" className="text-sm font-medium text-ink/80">
+              Nombre
+            </label>
+            <input
+              id="nombre"
+              name="nombre"
+              type="text"
+              required
+              className={campoClase}
+              placeholder="Tu nombre"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="contacto" className="text-sm font-medium text-ink/80">
+              WhatsApp o email
+            </label>
+            <input
+              id="contacto"
+              name="contacto"
+              type="text"
+              required
+              className={campoClase}
+              placeholder="Cómo te contactamos"
+            />
+          </div>
+        </div>
+
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="nombre" className="text-sm font-medium text-neutral-700">
-            Nombre
+          <label htmlFor="zona" className="text-sm font-medium text-ink/80">
+            Zona o barrio <span className="text-ink/40">(opcional)</span>
           </label>
           <input
-            id="nombre"
-            name="nombre"
+            id="zona"
+            name="zona"
             type="text"
-            required
-            className="rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-coral focus:outline-none"
-            placeholder="Tu nombre"
+            className={campoClase}
+            placeholder="Ej: Barrio Fátima"
           />
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="contacto" className="text-sm font-medium text-neutral-700">
-            WhatsApp o email
+          <label htmlFor="mensaje" className="text-sm font-medium text-ink/80">
+            Contanos sobre tus viandas <span className="text-ink/40">(opcional)</span>
           </label>
-          <input
-            id="contacto"
-            name="contacto"
-            type="text"
-            required
-            className="rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-coral focus:outline-none"
-            placeholder="Cómo te contactamos"
+          <textarea
+            id="mensaje"
+            name="mensaje"
+            rows={3}
+            className={`${campoClase} resize-none`}
+            placeholder="Qué cocinás, hace cuánto, etc."
           />
         </div>
-      </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="zona" className="text-sm font-medium text-neutral-700">
-          Zona o barrio <span className="text-neutral-400">(opcional)</span>
-        </label>
-        <input
-          id="zona"
-          name="zona"
-          type="text"
-          className="rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-coral focus:outline-none"
-          placeholder="Ej: Barrio Fátima"
-        />
-      </div>
+        {estado.status === "error" && (
+          <p className="text-sm text-coral-700" role="alert">
+            {estado.mensaje}
+          </p>
+        )}
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="mensaje" className="text-sm font-medium text-neutral-700">
-          Contanos sobre tus viandas <span className="text-neutral-400">(opcional)</span>
-        </label>
-        <textarea
-          id="mensaje"
-          name="mensaje"
-          rows={3}
-          className="rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-coral focus:outline-none"
-          placeholder="Qué cocinás, hace cuánto, etc."
-        />
-      </div>
-
-      {estado.status === "error" && (
-        <p className="text-sm text-red-600">{estado.mensaje}</p>
-      )}
-
-      <div>
-        <BotonEnviar />
-      </div>
-    </form>
+        <div>
+          <BotonEnviar />
+        </div>
+      </form>
+    </div>
   );
 }

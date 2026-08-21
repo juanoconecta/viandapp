@@ -14,6 +14,27 @@ Marketplace de viandas caseras en Rafaela, Santa Fe. Conecta "vianderas"
   raster de OpenStreetMap (`tile.openstreetmap.org`), gratis y sin necesidad de
   token ni cuenta. Ver nota de Turbopack más abajo para el motivo de usar raster
   en vez de un estilo vectorial
+- **`motion`** (ex Framer Motion) — animaciones de entrada y scroll-reveal en la
+  landing (`components/landing/Reveal.tsx`, `TarjetasVianda.tsx`)
+
+## Sistema de diseño
+
+Dirección "cuaderno de la vecina": cálido y casero, no la estética genérica de
+landing (crema + serif editorial + acento terracota).
+
+- **Color**: `paper` (`#FBF2E4`, fondo cálido tipo papel), `ink` (`#362417`, texto,
+  marrón cálido en vez de negro puro), `card` (`#FFFCF6`, superficie de tarjetas),
+  `coral` (marca, CTAs), `teal` (marca, acentos secundarios), `mostaza`
+  (`#E8A93D`, dorado cálido — usar con moderación, es un acento terciario).
+  Todo definido en `tailwind.config.ts`.
+- **Tipografía**: `Baloo 2` (display, redondeada y cercana — títulos únicamente,
+  vía `font-display`) + `Inter` (texto, vía `font-sans`), cargadas con
+  `next/font/google` en `app/layout.tsx`.
+- **Firma visual**: pila de "tarjetas de vianda" rotadas en el hero
+  (`TarjetasVianda.tsx`) — simula etiquetas/tarjetas escritas a mano en vez de
+  una foto de stock.
+- Los números en "¿Cómo funciona?" son válidos (es una secuencia real de 3
+  pasos); no agregar numeración decorativa en secciones que no sean procesos.
 
 ## Convenciones de código
 
@@ -40,6 +61,13 @@ Marketplace de viandas caseras en Rafaela, Santa Fe. Conecta "vianderas"
   del worker para parsear tiles. Si en el futuro se actualiza Next.js/MapLibre y se
   confirma que el bug está resuelto, se puede volver a `next dev` sin flags y a un
   estilo vectorial.
+- **No envolver un `<form action={serverAction}>` con `AnimatePresence
+  mode="wait"` / `motion.form`.** Rompe el swap de estado post-submit: el
+  `useActionState` sí actualiza (confirmado con logs de servidor), pero la
+  animación de salida del form nunca completa y el DOM nunca monta el estado
+  siguiente. Si un form necesita animarse, usar `motion` solo en el estado que
+  aparece (`initial`/`animate` sin `exit`) y dejar que React swapee el `<form>`
+  nativo directo, sin `AnimatePresence` alrededor.
 
 ## Variables de entorno (`.env.local`)
 
