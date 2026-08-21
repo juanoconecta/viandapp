@@ -33,6 +33,16 @@ landing (crema + serif editorial + acento terracota).
 - **Firma visual**: pila de "tarjetas de vianda" rotadas en el hero
   (`TarjetasVianda.tsx`) — simula etiquetas/tarjetas escritas a mano en vez de
   una foto de stock.
+- **Íconos**: SVG de línea propios en `components/landing/icons.tsx` (stroke
+  `currentColor`, `strokeWidth` 1.75, puntas redondeadas). No usar emoji como
+  ícono — es uno de los patrones más reconocibles de diseño genérico/generado
+  por IA; si hace falta un ícono nuevo, agregarlo ahí siguiendo el mismo estilo.
+- Evitar repetir la misma forma de sección dos veces seguidas (ej. dos grids de
+  3 columnas con ícono+título+texto una debajo de la otra) — rompe la
+  variación y se siente templated. Ver `¿Cómo funciona?` (grid numerado, es
+  una secuencia real) vs `¿Por qué sumarte?` (lista de filas) en la home.
+- Todo elemento clickeable/táctil apunta a >=44px de alto (botones, links de
+  nav, inputs) salvo el isotipo del logo.
 - Los números en "¿Cómo funciona?" son válidos (es una secuencia real de 3
   pasos); no agregar numeración decorativa en secciones que no sean procesos.
 

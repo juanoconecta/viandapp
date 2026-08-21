@@ -4,9 +4,10 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { motion } from "motion/react";
 import { anotarseComoInteresada } from "@/app/(consumer)/actions";
+import { IconCheck } from "./icons";
 
 const campoClase =
-  "rounded-xl border border-ink/15 bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink/35 transition-colors focus:border-coral focus:outline-none focus:ring-2 focus:ring-coral/25";
+  "rounded-xl border border-ink/15 bg-paper px-3.5 py-3 text-sm text-ink placeholder:text-ink/35 transition-colors focus:border-coral focus:outline-none focus:ring-2 focus:ring-coral/25";
 
 function BotonEnviar() {
   const { pending } = useFormStatus();
@@ -35,7 +36,7 @@ export default function FormularioInteres() {
         transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
         className="flex flex-col items-center gap-2 rounded-3xl border border-ink/10 bg-card p-6 py-10 text-center shadow-sm sm:p-8"
       >
-        <span className="text-4xl">🎉</span>
+        <IconCheck className="h-10 w-10 text-teal" />
         <p className="font-display text-lg font-semibold text-teal">
           ¡Listo, ya estás anotada!
         </p>

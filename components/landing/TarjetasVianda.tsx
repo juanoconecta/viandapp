@@ -1,10 +1,12 @@
 "use client";
 
 import { motion, useReducedMotion } from "motion/react";
+import { IconPlato, IconChispa } from "./icons";
 
 const TARJETAS = [
   {
-    emoji: "🍲",
+    Icon: IconPlato,
+    iconClase: "text-coral",
     titulo: "Hoy: Milanesa con puré",
     nota: "Doña Rosa — Barrio Fátima",
     rotate: -4,
@@ -13,7 +15,8 @@ const TARJETAS = [
     className: "bg-card text-ink z-20 w-56 sm:w-64",
   },
   {
-    emoji: "🥘",
+    Icon: IconPlato,
+    iconClase: "text-teal",
     titulo: "Tarta de verdura",
     nota: "$3.500 · retiro o envío",
     rotate: 6,
@@ -22,7 +25,8 @@ const TARJETAS = [
     className: "bg-card text-ink z-10 w-48 sm:w-56",
   },
   {
-    emoji: "✨",
+    Icon: IconChispa,
+    iconClase: "text-white",
     titulo: "Sin comisión",
     nota: null,
     rotate: -9,
@@ -65,8 +69,8 @@ export default function TarjetasVianda() {
           style={{ left: tarjeta.x, top: 40 }}
           className={`absolute rounded-2xl border border-ink/10 p-4 shadow-[0_8px_24px_-8px_rgba(54,36,23,0.25)] ${tarjeta.className}`}
         >
-          <p className="text-2xl">{tarjeta.emoji}</p>
-          <p className="mt-1 font-display text-sm font-semibold leading-snug">
+          <tarjeta.Icon className={`h-6 w-6 ${tarjeta.iconClase}`} />
+          <p className="mt-2 font-display text-sm font-semibold leading-snug">
             {tarjeta.titulo}
           </p>
           {tarjeta.nota && (

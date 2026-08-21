@@ -36,7 +36,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <p>viandapp © 2026 — Rafaela, Santa Fe</p>
               <a
                 href="#sumate"
-                className="font-medium text-coral transition-colors hover:text-coral-600"
+                className="py-3 font-medium text-coral transition-colors hover:text-coral-600"
               >
                 ¿Hacés viandas? Sumarte →
               </a>

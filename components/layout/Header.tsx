@@ -16,13 +16,13 @@ export default function Header() {
         <nav className="flex items-center gap-4 sm:gap-6">
           <a
             href="#sumate"
-            className="hidden text-sm font-medium text-ink/70 transition-colors hover:text-ink sm:block"
+            className="hidden py-3 text-sm font-medium text-ink/70 transition-colors hover:text-ink sm:block"
           >
             Sumarte como viandera
           </a>
           <Link
             href="/login"
-            className="rounded-full bg-coral px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-coral-600 hover:shadow-md active:scale-95"
+            className="rounded-full bg-coral px-4 py-3 text-sm font-medium text-white shadow-sm transition-all hover:bg-coral-600 hover:shadow-md active:scale-95"
           >
             Ingresar
           </Link>

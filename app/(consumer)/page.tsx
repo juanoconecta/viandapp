@@ -1,6 +1,8 @@
 import FormularioInteres from "@/components/landing/FormularioInteres";
+import PreviewPerfil from "@/components/landing/PreviewPerfil";
 import Reveal from "@/components/landing/Reveal";
 import TarjetasVianda from "@/components/landing/TarjetasVianda";
+import { IconMoneda, IconPin, IconControles } from "@/components/landing/icons";
 
 const PASOS = [
   {
@@ -22,22 +24,19 @@ const PASOS = [
 
 const BENEFICIOS = [
   {
-    emoji: "💸",
+    Icon: IconMoneda,
     titulo: "Cero comisión",
     texto: "A diferencia de las apps de delivery, no te cobramos porcentaje por venta.",
-    rotate: "-rotate-2",
   },
   {
-    emoji: "📍",
+    Icon: IconPin,
     titulo: "Visibilidad en tu ciudad",
     texto: "Aparecés en el mapa para quienes buscan viandas en tu ciudad.",
-    rotate: "rotate-1",
   },
   {
-    emoji: "🎛️",
+    Icon: IconControles,
     titulo: "Vos ponés las reglas",
     texto: "Elegís tus precios, tus horarios y si hacés envíos o solo retiro.",
-    rotate: "-rotate-1",
   },
 ];
 
@@ -108,27 +107,45 @@ export default function HomePage() {
       </section>
 
       <section className="border-y border-ink/10 bg-card/60">
-        <div className="mx-auto max-w-5xl px-4 py-20 sm:px-6">
-          <Reveal className="text-center">
+        <div className="mx-auto grid max-w-5xl grid-cols-1 items-center gap-10 px-4 py-20 sm:px-6 lg:grid-cols-2 lg:gap-16">
+          <Reveal>
             <h2 className="font-display text-3xl font-bold text-ink">
-              ¿Por qué sumarte?
+              Así se va a ver tu perfil
             </h2>
+            <p className="mt-3 text-ink/70">
+              Cada viandero tiene su propia página: tus platos, tus precios y
+              un botón directo a tu WhatsApp. Nada de formularios eternos ni
+              intermediarios en el medio del pedido.
+            </p>
           </Reveal>
-          <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-3">
-            {BENEFICIOS.map((beneficio, i) => (
-              <Reveal key={beneficio.titulo} delay={i * 0.1}>
-                <div
-                  className={`h-full rounded-2xl border border-ink/10 bg-card p-6 shadow-sm transition-transform duration-300 hover:-translate-y-1 hover:rotate-0 hover:shadow-md ${beneficio.rotate}`}
-                >
-                  <span className="text-2xl">{beneficio.emoji}</span>
-                  <h3 className="mt-3 font-display text-lg font-semibold text-teal">
+          <Reveal delay={0.15}>
+            <PreviewPerfil />
+          </Reveal>
+        </div>
+      </section>
+
+      <section className="mx-auto w-full max-w-3xl px-4 py-20 sm:px-6">
+        <Reveal className="text-center">
+          <h2 className="font-display text-3xl font-bold text-ink">
+            ¿Por qué sumarte?
+          </h2>
+        </Reveal>
+        <div className="mt-10 flex flex-col divide-y divide-ink/10 rounded-3xl border border-ink/10 bg-card">
+          {BENEFICIOS.map((beneficio, i) => (
+            <Reveal key={beneficio.titulo} delay={i * 0.08}>
+              <div className="flex items-center gap-5 px-6 py-5">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-teal/10">
+                  <beneficio.Icon className="h-5 w-5 text-teal" />
+                </div>
+                <div>
+                  <h3 className="font-display text-base font-semibold text-ink">
                     {beneficio.titulo}
                   </h3>
-                  <p className="mt-2 text-sm text-ink/65">{beneficio.texto}</p>
+                  <p className="mt-0.5 text-sm text-ink/65">{beneficio.texto}</p>
                 </div>
-              </Reveal>
-            ))}
-          </div>
+              </div>
+            </Reveal>
+          ))}
         </div>
       </section>
 
