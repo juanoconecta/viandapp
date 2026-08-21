@@ -29,8 +29,8 @@ const BENEFICIOS = [
   },
   {
     emoji: "📍",
-    titulo: "Visibilidad en tu barrio",
-    texto: "Aparecés en el mapa para los vecinos que buscan comida casera cerca suyo.",
+    titulo: "Visibilidad en tu ciudad",
+    texto: "Aparecés en el mapa para quienes buscan viandas en tu ciudad.",
     rotate: "rotate-1",
   },
   {
@@ -50,12 +50,12 @@ export default function HomePage() {
             Rafaela, Santa Fe
           </p>
           <h1 className="mt-3 font-display text-4xl font-bold leading-[1.05] text-ink sm:text-5xl lg:text-6xl">
-            Viandas caseras, directo de tu vecina a tu mesa
+            Viandas caseras, directo a tu mesa.
           </h1>
           <p className="mt-5 max-w-xl text-lg text-ink/70">
-            Estamos armando una red de vianderas de Rafaela para que cualquiera
-            pueda pedir comida casera cerca de casa, sin intermediarios ni apps
-            que se quedan con la mitad de la venta.
+            Estamos armando una red de emprendimientos y comercios de Rafaela
+            para que cualquiera pueda pedir comida casera, sin intermediarios
+            ni apps que se quedan con la mitad de la venta.
           </p>
           <a
             href="#sumate"
@@ -76,12 +76,12 @@ export default function HomePage() {
             ¿De qué se trata?
           </h2>
           <p className="mx-auto text-ink/70">
-            ViandApp es un espacio para que las vianderas de Rafaela —esas
-            cocineras de barrio que hacen comida casera para vender— tengan un
-            lugar donde mostrarse y vender directo, sin depender de apps de
-            delivery con comisiones altas ni de publicar a mano en cada grupo
-            de WhatsApp. Estamos arrancando: primero sumamos vianderas,
-            después abrimos el mapa para que los vecinos pidan.
+            ViandApp es un espacio para que quienes cocinan viandas en
+            Rafaela, tengan un lugar donde mostrarse y vender directo, sin
+            depender de apps de delivery con comisiones altas ni de publicar
+            a mano en cada grupo de WhatsApp. Estamos arrancando: primero
+            sumamos &quot;vianderos&quot;, después abrimos el mapa para que
+            la ciudad pida.
           </p>
         </Reveal>
       </section>
