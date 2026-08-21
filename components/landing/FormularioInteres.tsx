@@ -66,15 +66,16 @@ export default function FormularioInteres() {
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="contacto" className="text-sm font-medium text-ink/80">
-              WhatsApp o email
+              WhatsApp
             </label>
             <input
               id="contacto"
               name="contacto"
               type="text"
+              inputMode="tel"
               required
               className={campoClase}
-              placeholder="Cómo te contactamos"
+              placeholder="Ej: 3492 123456"
             />
           </div>
         </div>
