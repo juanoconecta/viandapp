@@ -10,11 +10,11 @@ export default function LogoIcon({ className }: { className?: string }) {
         d="M40,78 Q24,62,12,38 A28,28,0,0,1,68,38 Q56,62,40,78 Z"
         className="fill-coral"
       />
-      <rect x="28" y="16" width="4" height="17" rx="2" fill="white" />
-      <rect x="38" y="14" width="4" height="19" rx="2" fill="white" />
-      <rect x="48" y="16" width="4" height="17" rx="2" fill="white" />
-      <rect x="26" y="31" width="28" height="4" rx="2" fill="white" />
-      <rect x="38" y="35" width="4" height="26" rx="2" fill="white" />
+      <ellipse cx="39" cy="44" rx="17" ry="15" fill="white" />
+      <rect x="25" y="17" width="4" height="16" rx="2" fill="white" />
+      <rect x="33" y="13" width="4" height="20" rx="2" fill="white" />
+      <rect x="41" y="13" width="4" height="20" rx="2" fill="white" />
+      <rect x="49" y="17" width="4" height="16" rx="2" fill="white" />
     </svg>
   );
 }
