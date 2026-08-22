@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Baloo_2, Inter } from "next/font/google";
 import Header from "@/components/layout/Header";
+import Footer from "@/components/layout/Footer";
 import MotionProvider from "@/components/landing/MotionProvider";
 import "./globals.css";
 
@@ -31,17 +32,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <MotionProvider>
           <Header />
           <main className="flex-1">{children}</main>
-          <footer className="border-t border-ink/10">
-            <div className="mx-auto flex max-w-6xl flex-col items-center gap-2 px-4 py-8 text-sm text-ink/60 sm:flex-row sm:justify-between sm:px-6">
-              <p>viandapp © 2026 — Rafaela, Santa Fe</p>
-              <a
-                href="#sumate"
-                className="py-3 font-medium text-coral transition-colors hover:text-coral-600"
-              >
-                ¿Hacés viandas? Sumarte →
-              </a>
-            </div>
-          </footer>
+          <Footer />
         </MotionProvider>
       </body>
     </html>
