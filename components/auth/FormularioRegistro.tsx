@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
-import { registrarse, type EstadoAuth } from "@/app/auth/actions";
+import { registrarse, iniciarSesionConGoogle, type EstadoAuth } from "@/app/auth/actions";
 
 const campoClase =
   "rounded-xl border border-ink/15 bg-paper px-3.5 py-3 text-sm text-ink placeholder:text-ink/35 transition-colors focus:border-coral focus:outline-none focus:ring-2 focus:ring-coral/25";
@@ -79,6 +79,22 @@ export default function FormularioRegistro() {
         )}
 
         <BotonEnviar />
+      </form>
+
+      <div className="my-5 flex items-center gap-3">
+        <div className="h-px flex-1 bg-ink/10" />
+        <span className="text-xs text-ink/40">o</span>
+        <div className="h-px flex-1 bg-ink/10" />
+      </div>
+
+      <form action={iniciarSesionConGoogle}>
+        <input type="hidden" name="redirect" value="/app" />
+        <button
+          type="submit"
+          className="flex w-full items-center justify-center gap-2 rounded-full border border-ink/15 bg-paper px-6 py-3 text-sm font-medium text-ink transition-colors hover:bg-card"
+        >
+          Continuar con Google
+        </button>
       </form>
 
       <p className="mt-6 text-center text-sm text-ink/60">
