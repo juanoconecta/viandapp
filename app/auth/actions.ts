@@ -3,22 +3,11 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { sanitizarRedirect } from "@/lib/auth/redirect";
 
 export type EstadoAuth =
   | { status: "idle" }
   | { status: "error"; mensaje: string };
-
-// Solo permite rutas internas (un único "/" inicial) para evitar open
-// redirects si el campo oculto `redirect` fue manipulado en el cliente
-// (ej. `//evil.com` es protocol-relative y redirect() lo trataría como
-// externo). Defensa en profundidad: app/login/page.tsx ya sanitiza esto
-// al armar el form.
-function sanitizarRedirect(valor: string): string {
-  if (valor.startsWith("/") && !valor.startsWith("//")) {
-    return valor;
-  }
-  return "/app";
-}
 
 export async function iniciarSesion(
   _prevState: EstadoAuth,
@@ -91,7 +80,7 @@ export async function cerrarSesion() {
 }
 
 export async function iniciarSesionConGoogle(formData: FormData) {
-  const redirectTo = String(formData.get("redirect") ?? "/app");
+  const redirectTo = sanitizarRedirect(String(formData.get("redirect") ?? "/app"));
   const headersList = await headers();
   const host = headersList.get("host");
   const protocol = host?.startsWith("localhost") ? "http" : "https";

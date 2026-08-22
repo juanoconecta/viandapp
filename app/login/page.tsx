@@ -1,14 +1,5 @@
 import FormularioLogin from "@/components/auth/FormularioLogin";
-
-// Solo permite rutas internas (un único "/" inicial) para evitar open
-// redirects vía el query param `redirect` (ej. `//evil.com` es
-// protocol-relative y redirect() lo trataría como externo).
-function sanitizarRedirect(valor: string | undefined): string {
-  if (valor && valor.startsWith("/") && !valor.startsWith("//")) {
-    return valor;
-  }
-  return "/app";
-}
+import { sanitizarRedirect } from "@/lib/auth/redirect";
 
 export default async function LoginPage({
   searchParams,
