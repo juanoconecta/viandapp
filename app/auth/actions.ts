@@ -7,7 +7,8 @@ import { sanitizarRedirect } from "@/lib/auth/redirect";
 
 export type EstadoAuth =
   | { status: "idle" }
-  | { status: "error"; mensaje: string };
+  | { status: "error"; mensaje: string }
+  | { status: "verificar"; mensaje: string };
 
 export async function iniciarSesion(
   _prevState: EstadoAuth,
@@ -51,7 +52,7 @@ export async function registrarse(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: { data: { nombre } },
@@ -67,6 +68,13 @@ export async function registrarse(
     return {
       status: "error",
       mensaje: "No pudimos crear tu cuenta. Probá de nuevo.",
+    };
+  }
+
+  if (!data.session) {
+    return {
+      status: "verificar",
+      mensaje: "Te mandamos un mail para confirmar tu cuenta. Revisá tu casilla.",
     };
   }
 

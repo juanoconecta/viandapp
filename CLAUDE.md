@@ -8,8 +8,8 @@ Marketplace de viandas caseras en Rafaela, Santa Fe. Conecta "vianderas"
 - **Next.js 16** (App Router, TypeScript, React 19)
 - **Tailwind CSS v4** — theming vía `tailwind.config.ts` (cargado con `@config` en
   `app/globals.css`) para mantener la sintaxis clásica `theme.extend.colors`
-- **Supabase** — Postgres + Auth (auth todavía no implementada, todo público en esta
-  primera iteración)
+- **Supabase** — Postgres + Auth (email/password y Google OAuth, gatean la ruta
+  `/app` vía `middleware.ts`; la landing en `/` sigue pública)
 - **MapLibre GL JS** — mapa de vianderas, siempre como Client Component. Tiles
   raster de OpenStreetMap (`tile.openstreetmap.org`), gratis y sin necesidad de
   token ni cuenta. Ver nota de Turbopack más abajo para el motivo de usar raster
@@ -86,6 +86,19 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 ```
 
+### Prerrequisitos de Auth (Supabase Dashboard)
+
+- Authentication → Providers → Email → "Confirm email" está OFF por ahora
+  (necesario para que el flujo actual de registro-y-redirect funcione sin
+  disparar la rama "verificar" todo el tiempo). El spec dice que hay que
+  volver a activarlo antes de invitar usuarias reales; `registrarse` en
+  `app/auth/actions.ts` ya maneja ambos casos (con y sin sesión post-signup).
+- Google OAuth requiere configurar un cliente OAuth en Google Cloud y cargar
+  Client ID/Secret + Redirect URLs en el provider de Google del Supabase
+  Dashboard — todavía no se hizo en esta branch, así que "Continuar con
+  Google" cae en `/login?error=oauth` hasta que se configure. No es un bug
+  de código.
+
 ## Schema de base de datos (Supabase / Postgres)
 
 Ejecutar en el SQL Editor de Supabase:
@@ -156,4 +169,6 @@ no genera valor. La home ahora es una landing que explica el proyecto y termina 
 un formulario que suma interesadas a `interesados_viandera` vía Server Action
 (`app/(consumer)/actions.ts`). El mapa/filtros/lista de viandas siguen en el
 código (`components/map`, `components/viandas`) para cuando haya datos reales,
-pero no se renderizan en la home por ahora. Sin autenticación todavía.
+pero no se renderizan en la home por ahora. La ruta `/app` ya existe detrás de
+Supabase Auth (email/password + Google OAuth), gateada por `middleware.ts`;
+`/` (la landing) sigue pública y sin gate.

@@ -78,6 +78,12 @@ export default function FormularioRegistro() {
           </p>
         )}
 
+        {estado.status === "verificar" && (
+          <p className="text-sm text-teal-700" role="status">
+            {estado.mensaje}
+          </p>
+        )}
+
         <BotonEnviar />
       </form>
 
