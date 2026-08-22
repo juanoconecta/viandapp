@@ -57,7 +57,7 @@ arrastrable), Tailwind CSS v4.
 
 ---
 
-## Tarea 1: Migración de base de datos, storage y variables de entorno
+## Task 1: Migración de base de datos, storage y variables de entorno
 
 **Files:**
 - Modify: `CLAUDE.md` (sección de schema + variables de entorno)
@@ -185,7 +185,7 @@ git commit -m "Document schema/env additions for the viandera panel (migration r
 
 ---
 
-## Tarea 2: Infraestructura — tipos, cliente admin, helper de storage
+## Task 2: Infraestructura — tipos, cliente admin, helper de storage
 
 **Files:**
 - Modify: `types/index.ts`
@@ -287,7 +287,7 @@ git commit -m "Add admin client, admin email check, and storage path helpers for
 
 ---
 
-## Tarea 3: Middleware — gating y reclamo de cuenta para `/viandera` y `/admin`
+## Task 3: Middleware — gating y reclamo de cuenta para `/viandera` y `/admin`
 
 **Files:**
 - Modify: `lib/supabase/middleware.ts`
@@ -418,7 +418,7 @@ git commit -m "Gate /viandera and /admin, auto-claim viandera accounts on first 
 
 ---
 
-## Tarea 4: Panel de administración (`/admin`) — invitar vianderas
+## Task 4: Panel de administración (`/admin`) — invitar vianderas
 
 **Files:**
 - Create: `app/admin/layout.tsx`
@@ -698,7 +698,7 @@ git commit -m "Add admin panel to invite vianderas"
 
 ---
 
-## Tarea 5: Dashboard de la viandera — layout, resumen y platos
+## Task 5: Dashboard de la viandera — layout, resumen y platos
 
 **Files:**
 - Create: `app/viandera/layout.tsx`
@@ -1020,7 +1020,7 @@ git commit -m "Add viandera dashboard: profile summary and dish list with availa
 
 ---
 
-## Tarea 6: Editar perfil — formulario y selector de ubicación en el mapa
+## Task 6: Editar perfil — formulario y selector de ubicación en el mapa
 
 **Files:**
 - Create: `components/map/SelectorUbicacion.tsx`
@@ -1400,7 +1400,7 @@ git commit -m "Add viandera profile editing with a draggable-pin location picker
 
 ---
 
-## Tarea 7: Alta y edición de platos con foto
+## Task 7: Alta y edición de platos con foto
 
 **Files:**
 - Create: `components/viandera/FormularioPlato.tsx`
