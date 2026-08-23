@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function AppHomePage() {
@@ -5,6 +6,18 @@ export default async function AppHomePage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  if (user) {
+    const { data: viandera } = await supabase
+      .from("vianderas")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (viandera) {
+      redirect("/viandera");
+    }
+  }
 
   return (
     <div className="flex flex-col items-center gap-3 rounded-3xl border border-ink/10 bg-card p-10 text-center">
