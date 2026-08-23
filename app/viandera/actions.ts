@@ -41,6 +41,53 @@ export async function alternarDisponibilidad(formData: FormData): Promise<void> 
   revalidatePath("/viandera");
 }
 
+export type EstadoPerfil =
+  | { status: "idle" }
+  | { status: "error"; mensaje: string }
+  | { status: "ok" };
+
+export async function actualizarPerfil(
+  _prevState: EstadoPerfil,
+  formData: FormData,
+): Promise<EstadoPerfil> {
+  const nombre = String(formData.get("nombre") ?? "").trim();
+  const bio = String(formData.get("bio") ?? "").trim();
+  const telefono = String(formData.get("telefono") ?? "").trim();
+  const latRaw = String(formData.get("lat") ?? "");
+  const lngRaw = String(formData.get("lng") ?? "");
+
+  if (!nombre) {
+    return { status: "error", mensaje: "El nombre no puede estar vacío." };
+  }
+
+  const supabase = await createClient();
+  const vianderaId = await obtenerVianderaId(supabase);
+  if (!vianderaId) {
+    return { status: "error", mensaje: "No pudimos identificar tu perfil." };
+  }
+
+  const { error } = await supabase
+    .from("vianderas")
+    .update({
+      nombre,
+      bio: bio || null,
+      telefono: telefono || null,
+      lat: latRaw ? Number(latRaw) : null,
+      lng: lngRaw ? Number(lngRaw) : null,
+    })
+    .eq("id", vianderaId);
+
+  if (error) {
+    return {
+      status: "error",
+      mensaje: "No pudimos guardar los cambios. Probá de nuevo.",
+    };
+  }
+
+  revalidatePath("/viandera/perfil");
+  return { status: "ok" };
+}
+
 export async function borrarPlato(formData: FormData): Promise<void> {
   const viandaId = String(formData.get("viandaId") ?? "");
 
