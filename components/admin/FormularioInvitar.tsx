@@ -1,25 +1,9 @@
 "use client";
 
 import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
+import { campoClase } from "@/components/ui/campoClase";
+import BotonEnviar from "@/components/ui/BotonEnviar";
 import { invitarViandera, type EstadoInvitacion } from "@/app/admin/actions";
-
-const campoClase =
-  "rounded-xl border border-ink/15 bg-paper px-3.5 py-3 text-sm text-ink placeholder:text-ink/35 transition-colors focus:border-coral focus:outline-none focus:ring-2 focus:ring-coral/25";
-
-function BotonInvitar() {
-  const { pending } = useFormStatus();
-
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="rounded-full bg-coral px-6 py-3 text-sm font-medium text-white shadow-md shadow-coral/20 transition-all hover:-translate-y-0.5 hover:bg-coral-600 hover:shadow-lg disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
-    >
-      {pending ? "Invitando..." : "Invitar"}
-    </button>
-  );
-}
 
 export default function FormularioInvitar() {
   const [estado, formAction] = useActionState<EstadoInvitacion, FormData>(
@@ -74,7 +58,7 @@ export default function FormularioInvitar() {
       )}
 
       <div>
-        <BotonInvitar />
+        <BotonEnviar label="Invitar" labelEnviando="Invitando..." />
       </div>
     </form>
   );
