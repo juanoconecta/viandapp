@@ -119,20 +119,51 @@ Convención de path: `platos/{vianderas_id}/{vianda_id}-{timestamp}.{ext}`.
 
 ## Flujo de invitación (admin)
 
+> **Actualizado post-revisión final (2026-08-22):** el diseño original de
+> esta sección y de "Reclamo de cuenta" (más abajo) vinculaba la cuenta
+> vía un campo `vianderas_id` guardado en el `user_metadata` de la
+> invitación, leído recién en el primer login. La revisión final del
+> whole-branch encontró que `user_metadata` es editable por el propio
+> usuario vía el SDK de cliente de Supabase, y que las filas de
+> `vianderas` sin reclamar son enumerables públicamente (la policy
+> `activo = true` no filtra por `user_id`) — combinando ambas cosas,
+> cualquier cuenta registrada podía robarse una invitación pendiente
+> antes de que la vianderas invitada la reclamara. Corregido vinculando
+> `user_id` **en el momento de la invitación**, no en un paso de reclamo
+> posterior — ver el código real en `app/admin/actions.ts`. Las
+> secciones de abajo quedan como registro de la decisión original y de
+> por qué se descartó, no como el diseño vigente.
+
 - Ruta `/admin`, gateada: la vista se renderiza server-side y verifica que
-  el email del usuario logueado sea el email del admin (constante hardcodeada
-  en el código — un solo admin, no hace falta más).
+  el email del usuario logueado sea el email del admin (vía
+  `process.env.ADMIN_EMAIL` — no hardcodeado en el código porque el repo
+  de GitHub es público, ver la sección de riesgos más abajo).
 - Formulario: nombre + email. Al enviar, un Server Action con la service
-  role key:
+  role key **(ahora con un chequeo `esAdmin()` explícito al inicio de la
+  acción — ver nota de seguridad abajo)**:
   1. Inserta la fila en `vianderas` (`nombre`, resto de campos en default/null).
-  2. Llama `supabase.auth.admin.inviteUserByEmail(email, { data: { vianderas_id } })`,
-     guardando el id de la fila recién creada en el `user_metadata` de la
-     invitación.
+  2. Llama `supabase.auth.admin.inviteUserByEmail(email)` — sin
+     `user_metadata`, el diseño original guardaba ahí el id de la fila,
+     ya no.
+  3. Con el `user.id` que devuelve la invitación exitosa, vincula
+     `vianderas.user_id` directamente: `UPDATE vianderas SET user_id =
+     :invitado_id WHERE id = :viandera_id`.
 - Debajo del formulario, tabla simple con las vianderas existentes y su
   estado (`user_id` nulo → "Invitada, pendiente"; con `user_id` → "Cuenta
-  activa").
+  activa" — con el vínculo ahora inmediato al invitar, este estado pasa a
+  "activa" apenas se manda la invitación, no cuando la viandera acepta).
 
-## Reclamo de cuenta (primer login de la viandera)
+**Nota de seguridad agregada en la revisión final:** un Server Action es
+un endpoint público direccionado por un id de acción embebido en el
+bundle del cliente — el gateo del middleware por *ruta* no lo protege.
+Toda Server Action de `/admin` (y la lectura de `/admin/page.tsx`, que
+también usa la service role key) debe re-chequear `esAdmin()` con su
+propio `getUser()` al inicio, no confiar únicamente en el middleware.
+
+## Reclamo de cuenta — DESCARTADO, ver nota arriba
+
+Diseño original (no implementado, vulnerable — mantenido solo como
+registro):
 
 - La invitada recibe el mail de Supabase, hace click, define su contraseña
   (Supabase la lleva a un flujo de "set password" antes de dejarla entrar).
@@ -144,9 +175,12 @@ Convención de path: `platos/{vianderas_id}/{vianda_id}-{timestamp}.{ext}`.
      idempotente, no pasa nada si corre dos veces).
 - Transparente para la viandera: no ve ningún paso extra, solo entra a su
   panel ya vinculado.
-- Si una cuenta llega a `/viandera` sin `vianderas_id` en el metadata y sin
-  ninguna fila de `vianderas` vinculada a su `user_id` (un consumidor
-  cualquiera intentando entrar), el middleware la redirige a `/app`.
+
+Diseño vigente: no hace falta ningún paso de reclamo — la cuenta ya queda
+vinculada al invitarla (ver "Flujo de invitación" arriba). Si una cuenta
+sin fila de `vianderas` vinculada a su `user_id` (un consumidor cualquiera)
+visita `/viandera`, el middleware la redirige a `/app` — sin leer
+`user_metadata` en ningún punto del flujo.
 
 ## Panel de la viandera
 
