@@ -1,6 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { esAdmin } from "@/lib/auth/admin";
 
 export async function updateSession(request: NextRequest) {
@@ -65,26 +64,7 @@ export async function updateSession(request: NextRequest) {
       .maybeSingle();
 
     if (!vianderaPropia) {
-      const vianderasIdPendiente = user.user_metadata?.vianderas_id as
-        | string
-        | undefined;
-      let vinculada = false;
-
-      if (vianderasIdPendiente) {
-        const admin = createAdminClient();
-        const { data: reclamada } = await admin
-          .from("vianderas")
-          .update({ user_id: user.id })
-          .eq("id", vianderasIdPendiente)
-          .is("user_id", null)
-          .select("id")
-          .maybeSingle();
-        vinculada = Boolean(reclamada);
-      }
-
-      if (!vinculada) {
-        return redirigirCon("/app");
-      }
+      return redirigirCon("/app");
     }
   }
 

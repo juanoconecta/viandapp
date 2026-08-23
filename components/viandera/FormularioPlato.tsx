@@ -38,13 +38,6 @@ export default function FormularioPlato({
       {modo === "editar" && platoId && (
         <input type="hidden" name="platoId" value={platoId} />
       )}
-      {valoresIniciales?.fotoUrl && (
-        <input
-          type="hidden"
-          name="fotoUrlActual"
-          value={valoresIniciales.fotoUrl}
-        />
-      )}
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="nombre" className="text-sm font-medium text-ink/80">

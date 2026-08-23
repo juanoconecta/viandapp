@@ -192,7 +192,6 @@ export async function actualizarPlato(
   const precioRaw = String(formData.get("precio") ?? "");
   const tipo = String(formData.get("tipo") ?? "") as TipoVianda;
   const disponible = formData.get("disponible") === "on";
-  const fotoUrlActual = String(formData.get("fotoUrlActual") ?? "") || null;
   const foto = formData.get("foto");
 
   if (!platoId || !nombre || !tipo) {
@@ -205,12 +204,23 @@ export async function actualizarPlato(
     return { status: "error", mensaje: "No pudimos identificar tu perfil." };
   }
 
-  let fotoUrl = fotoUrlActual;
+  const { data: platoActual } = await supabase
+    .from("viandas")
+    .select("foto_url")
+    .eq("id", platoId)
+    .eq("vianderas_id", vianderaId)
+    .maybeSingle();
+
+  if (!platoActual) {
+    return { status: "error", mensaje: "No pudimos identificar el plato." };
+  }
+
+  let fotoUrl = platoActual.foto_url;
   if (foto instanceof File && foto.size > 0) {
     const nuevaUrl = await subirFoto(supabase, vianderaId, foto);
     if (nuevaUrl) {
-      if (fotoUrlActual) {
-        const pathAnterior = pathDesdeFotoUrl(fotoUrlActual);
+      if (platoActual.foto_url) {
+        const pathAnterior = pathDesdeFotoUrl(platoActual.foto_url);
         if (pathAnterior) {
           await supabase.storage.from("platos").remove([pathAnterior]);
         }

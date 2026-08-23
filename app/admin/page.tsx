@@ -1,7 +1,19 @@
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { esAdmin } from "@/lib/auth/admin";
 import FormularioInvitar from "@/components/admin/FormularioInvitar";
 
 export default async function AdminPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!esAdmin(user?.email)) {
+    redirect("/app");
+  }
+
   const admin = createAdminClient();
   const { data: vianderas } = await admin
     .from("vianderas")

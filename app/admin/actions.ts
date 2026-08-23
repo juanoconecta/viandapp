@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { esAdmin } from "@/lib/auth/admin";
 
 export type EstadoInvitacion =
   | { status: "idle" }
@@ -12,6 +14,15 @@ export async function invitarViandera(
   _prevState: EstadoInvitacion,
   formData: FormData,
 ): Promise<EstadoInvitacion> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!esAdmin(user?.email)) {
+    return { status: "error", mensaje: "No autorizado." };
+  }
+
   const nombre = String(formData.get("nombre") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
 
@@ -42,17 +53,28 @@ export async function invitarViandera(
     };
   }
 
-  const { error: errorInvite } = await admin.auth.admin.inviteUserByEmail(
-    email,
-    { data: { vianderas_id: viandera.id } },
-  );
+  const { data: invitado, error: errorInvite } =
+    await admin.auth.admin.inviteUserByEmail(email);
 
-  if (errorInvite) {
+  if (errorInvite || !invitado?.user) {
     await admin.from("vianderas").delete().eq("id", viandera.id);
     return {
       status: "error",
       mensaje:
         "No pudimos enviar la invitación (¿el email ya tiene una cuenta?).",
+    };
+  }
+
+  const { error: errorLink } = await admin
+    .from("vianderas")
+    .update({ user_id: invitado.user.id })
+    .eq("id", viandera.id);
+
+  if (errorLink) {
+    return {
+      status: "error",
+      mensaje:
+        "La invitación se envió, pero no pudimos vincular la cuenta. Revisalo manualmente en Supabase.",
     };
   }
 
