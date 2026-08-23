@@ -237,3 +237,10 @@ código (`components/map`, `components/viandas`) para cuando haya datos reales,
 pero no se renderizan en la home por ahora. La ruta `/app` ya existe detrás de
 Supabase Auth (email/password + Google OAuth), gateada por `middleware.ts`;
 `/` (la landing) sigue pública y sin gate.
+
+Panel de viandera (agregado 2026-08-22): las vianderas invitadas desde
+`/admin` ya no se cargan a mano en el dashboard de Supabase — entran a
+`/viandera` con su propia cuenta, editan su perfil (incluida la ubicación
+con un pin arrastrable en el mapa) y administran su menú completo, con
+fotos reales en Supabase Storage. `/admin` es un panel de un solo admin
+(chequeado por `ADMIN_EMAIL`), no un sistema de roles.
