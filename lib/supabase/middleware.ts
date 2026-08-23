@@ -29,11 +29,15 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user && request.nextUrl.pathname.startsWith("/app")) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("redirect", request.nextUrl.pathname);
-    return NextResponse.redirect(url);
+  const { pathname } = request.nextUrl;
+  const esRutaProtegida = pathname === "/app" || pathname.startsWith("/app/");
+
+  if (!user && esRutaProtegida) {
+    const url = new URL("/login", request.url);
+    url.searchParams.set("redirect", pathname);
+    const response = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((cookie) => response.cookies.set(cookie));
+    return response;
   }
 
   return supabaseResponse;

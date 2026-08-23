@@ -1,9 +1,9 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { sanitizarRedirect } from "@/lib/auth/redirect";
+import { resolverOrigin } from "@/lib/auth/origin";
 
 export type EstadoAuth =
   | { status: "idle" }
@@ -89,10 +89,7 @@ export async function cerrarSesion() {
 
 export async function iniciarSesionConGoogle(formData: FormData) {
   const redirectTo = sanitizarRedirect(String(formData.get("redirect") ?? "/app"));
-  const headersList = await headers();
-  const host = headersList.get("host");
-  const protocol = host?.startsWith("localhost") ? "http" : "https";
-  const origin = `${protocol}://${host}`;
+  const origin = await resolverOrigin();
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithOAuth({

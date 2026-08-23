@@ -8,7 +8,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <form action={cerrarSesion}>
           <button
             type="submit"
-            className="text-sm font-medium text-ink/60 transition-colors hover:text-coral"
+            className="px-3 py-3 text-sm font-medium text-ink/60 transition-colors hover:text-coral"
           >
             Cerrar sesión
           </button>

@@ -1,28 +1,12 @@
 "use client";
 
 import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { registrarse, iniciarSesionConGoogle, type EstadoAuth } from "@/app/auth/actions";
-
-const campoClase =
-  "rounded-xl border border-ink/15 bg-paper px-3.5 py-3 text-sm text-ink placeholder:text-ink/35 transition-colors focus:border-coral focus:outline-none focus:ring-2 focus:ring-coral/25";
+import { campoClase } from "@/components/ui/campoClase";
+import BotonEnviar from "@/components/ui/BotonEnviar";
 
 const estadoInicial: EstadoAuth = { status: "idle" };
-
-function BotonEnviar() {
-  const { pending } = useFormStatus();
-
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="rounded-full bg-coral px-6 py-3 text-sm font-medium text-white shadow-md shadow-coral/20 transition-all hover:-translate-y-0.5 hover:bg-coral-600 hover:shadow-lg disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
-    >
-      {pending ? "Creando cuenta..." : "Crear cuenta"}
-    </button>
-  );
-}
 
 export default function FormularioRegistro() {
   const [estado, formAction] = useActionState(registrarse, estadoInicial);
@@ -84,7 +68,7 @@ export default function FormularioRegistro() {
           </p>
         )}
 
-        <BotonEnviar />
+        <BotonEnviar label="Crear cuenta" labelEnviando="Creando cuenta..." />
       </form>
 
       <div className="my-5 flex items-center gap-3">

@@ -1,27 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
 import { motion } from "motion/react";
 import { anotarseComoInteresada } from "@/app/(consumer)/actions";
+import { campoClase } from "@/components/ui/campoClase";
+import BotonEnviar from "@/components/ui/BotonEnviar";
 import { IconCheck } from "./icons";
-
-const campoClase =
-  "rounded-xl border border-ink/15 bg-paper px-3.5 py-3 text-sm text-ink placeholder:text-ink/35 transition-colors focus:border-coral focus:outline-none focus:ring-2 focus:ring-coral/25";
-
-function BotonEnviar() {
-  const { pending } = useFormStatus();
-
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="rounded-full bg-coral px-6 py-3 text-sm font-medium text-white shadow-md shadow-coral/20 transition-all hover:-translate-y-0.5 hover:bg-coral-600 hover:shadow-lg disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
-    >
-      {pending ? "Enviando..." : "Quiero anotarme"}
-    </button>
-  );
-}
 
 export default function FormularioInteres() {
   const [estado, formAction] = useActionState(anotarseComoInteresada, {
@@ -129,7 +113,7 @@ export default function FormularioInteres() {
         )}
 
         <div>
-          <BotonEnviar />
+          <BotonEnviar label="Quiero anotarme" labelEnviando="Enviando..." />
         </div>
       </form>
     </div>
