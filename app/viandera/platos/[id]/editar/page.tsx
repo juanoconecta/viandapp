@@ -14,12 +14,28 @@ export default async function EditarPlatoPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: viandera } = await supabase
+    .from("vianderas")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!viandera) redirect("/app");
+
   const { data: plato } = await supabase
     .from("viandas")
     .select("id, nombre, descripcion, precio, tipo, foto_url, disponible")
     .eq("id", id)
+    .eq("vianderas_id", viandera.id)
     .maybeSingle();
 
+  // Scoping by vianderas_id (not just id) matters: "viandas" has a
+  // permissive public SELECT policy (disponible = true) alongside the
+  // owner-scoped one, and RLS combines permissive policies with OR — so
+  // for the common case of a published dish, RLS alone would let any
+  // logged-in viandera fetch someone else's plato here. The explicit
+  // filter is what actually enforces "only your own dish, or redirect
+  // exactly like a nonexistent one."
   if (!plato) redirect("/viandera");
 
   return (
