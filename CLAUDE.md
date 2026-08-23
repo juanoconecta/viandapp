@@ -84,7 +84,15 @@ landing (crema + serif editorial + acento terracota).
 ```
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+ADMIN_EMAIL=
 ```
+
+Las últimas dos son server-only — nunca `NEXT_PUBLIC_`, nunca importadas
+desde un archivo `'use client'`. Se usan para el panel de admin (`/admin`)
+y el panel de viandera (`/viandera`): invitar cuentas, vincular la cuenta
+de una viandera a su fila en `vianderas`, y verificar quién es el admin sin
+una tabla de roles.
 
 ### Prerrequisitos de Auth (Supabase Dashboard)
 
@@ -161,6 +169,63 @@ create policy "cualquiera puede anotarse como interesada"
 `interesados_viandera` es la lista de espera de la landing: sin policy de `select`
 para `anon` a propósito (los leads solo se ven desde el dashboard de Supabase con
 la cuenta del proyecto), solo `insert` público vía el formulario.
+
+Agregado para el panel de viandera (altas/ediciones desde `/viandera`,
+invitaciones desde `/admin`):
+
+```sql
+alter table vianderas
+  add column user_id uuid references auth.users(id) unique;
+
+create policy "viandera ve su propia fila"
+  on vianderas for select
+  using (auth.uid() = user_id);
+
+create policy "viandera edita su propia fila"
+  on vianderas for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "viandera ve sus propios platos"
+  on viandas for select
+  using (
+    vianderas_id in (select id from vianderas where user_id = auth.uid())
+  );
+
+create policy "viandera administra sus propios platos"
+  on viandas for all
+  using (
+    vianderas_id in (select id from vianderas where user_id = auth.uid())
+  )
+  with check (
+    vianderas_id in (select id from vianderas where user_id = auth.uid())
+  );
+
+insert into storage.buckets (id, name, public)
+values ('platos', 'platos', true);
+
+create policy "cualquiera lee fotos de platos"
+  on storage.objects for select
+  using (bucket_id = 'platos');
+
+create policy "viandera sube fotos a su propia carpeta"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'platos'
+    and (storage.foldername(name))[1] in (
+      select id::text from vianderas where user_id = auth.uid()
+    )
+  );
+
+create policy "viandera borra fotos de su propia carpeta"
+  on storage.objects for delete
+  using (
+    bucket_id = 'platos'
+    and (storage.foldername(name))[1] in (
+      select id::text from vianderas where user_id = auth.uid()
+    )
+  );
+```
 
 ## Estado del proyecto
 
