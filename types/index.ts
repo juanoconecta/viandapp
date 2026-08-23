@@ -8,6 +8,7 @@ export type Viandera = {
   lng: number | null;
   telefono: string | null;
   activo: boolean;
+  user_id: string | null;
   created_at: string;
 };
 
