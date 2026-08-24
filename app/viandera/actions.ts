@@ -174,6 +174,7 @@ export async function crearPlato(
   const precioRaw = String(formData.get("precio") ?? "");
   const tipo = String(formData.get("tipo") ?? "") as TipoVianda;
   const foto = formData.get("foto");
+  const etiquetas = formData.getAll("etiquetas").map(String);
 
   if (!nombre || !tipo) {
     return { status: "error", mensaje: "Completá el nombre y el tipo." };
@@ -198,7 +199,7 @@ export async function crearPlato(
     tipo,
     foto_url: fotoUrl,
     disponible: true,
-    etiquetas: [],
+    etiquetas,
   });
 
   if (error) {
@@ -223,6 +224,7 @@ export async function actualizarPlato(
   const tipo = String(formData.get("tipo") ?? "") as TipoVianda;
   const disponible = formData.get("disponible") === "on";
   const foto = formData.get("foto");
+  const etiquetas = formData.getAll("etiquetas").map(String);
 
   if (!platoId || !nombre || !tipo) {
     return { status: "error", mensaje: "Completá el nombre y el tipo." };
@@ -268,6 +270,7 @@ export async function actualizarPlato(
       tipo,
       disponible,
       foto_url: fotoUrl,
+      etiquetas,
     })
     .eq("id", platoId)
     .eq("vianderas_id", vianderaId);

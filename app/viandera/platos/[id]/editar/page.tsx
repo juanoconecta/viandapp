@@ -24,7 +24,7 @@ export default async function EditarPlatoPage({
 
   const { data: plato } = await supabase
     .from("viandas")
-    .select("id, nombre, descripcion, precio, tipo, foto_url, disponible")
+    .select("id, nombre, descripcion, precio, tipo, foto_url, disponible, etiquetas")
     .eq("id", id)
     .eq("vianderas_id", viandera.id)
     .maybeSingle();
@@ -54,6 +54,7 @@ export default async function EditarPlatoPage({
             tipo: plato.tipo,
             fotoUrl: plato.foto_url,
             disponible: plato.disponible,
+            etiquetas: plato.etiquetas,
           }}
         />
       </div>

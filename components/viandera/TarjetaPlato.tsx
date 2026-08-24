@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { alternarDisponibilidad, borrarPlato } from "@/app/viandera/actions";
 import type { TipoVianda } from "@/types";
+import { ETIQUETAS_DIETARIAS } from "@/lib/viandera/etiquetas";
 
 type Plato = {
   id: string;
@@ -11,6 +12,7 @@ type Plato = {
   tipo: TipoVianda;
   foto_url: string | null;
   disponible: boolean;
+  etiquetas: string[];
 };
 
 export default function TarjetaPlato({ plato }: { plato: Plato }) {
@@ -38,6 +40,22 @@ export default function TarjetaPlato({ plato }: { plato: Plato }) {
           <p className="text-sm font-medium text-coral">
             ${plato.precio.toLocaleString("es-AR")}
           </p>
+        )}
+
+        {plato.etiquetas.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {plato.etiquetas.map((valor) => {
+              const et = ETIQUETAS_DIETARIAS.find((e) => e.valor === valor);
+              return et ? (
+                <span
+                  key={valor}
+                  className="rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-medium text-teal-700"
+                >
+                  {et.etiqueta}
+                </span>
+              ) : null;
+            })}
+          </div>
         )}
 
         <div className="mt-2 flex flex-wrap items-center gap-3">

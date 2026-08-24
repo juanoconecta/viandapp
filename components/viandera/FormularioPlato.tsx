@@ -5,6 +5,7 @@ import { crearPlato, actualizarPlato, type EstadoPlato } from "@/app/viandera/ac
 import type { TipoVianda } from "@/types";
 import { campoClase } from "@/components/ui/campoClase";
 import BotonEnviar from "@/components/ui/BotonEnviar";
+import { ETIQUETAS_DIETARIAS } from "@/lib/viandera/etiquetas";
 
 type Props = {
   modo: "nuevo" | "editar";
@@ -16,6 +17,7 @@ type Props = {
     tipo: TipoVianda;
     fotoUrl: string | null;
     disponible: boolean;
+    etiquetas: string[];
   };
 };
 
@@ -124,6 +126,29 @@ export default function FormularioPlato({
           accept="image/*"
           className={campoClase}
         />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium text-ink/80">
+          Apto para <span className="text-ink/40">(opcional)</span>
+        </span>
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          {ETIQUETAS_DIETARIAS.map((et) => (
+            <label
+              key={et.valor}
+              className="flex items-center gap-2 text-sm text-ink/80"
+            >
+              <input
+                type="checkbox"
+                name="etiquetas"
+                value={et.valor}
+                defaultChecked={valoresIniciales?.etiquetas?.includes(et.valor)}
+                className="h-4 w-4 rounded border-ink/25 text-coral focus:ring-coral/25"
+              />
+              {et.etiqueta}
+            </label>
+          ))}
+        </div>
       </div>
 
       {modo === "editar" && (

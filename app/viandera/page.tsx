@@ -20,7 +20,7 @@ export default async function VianderaDashboardPage() {
 
   const { data: platos } = await supabase
     .from("viandas")
-    .select("id, nombre, precio, tipo, foto_url, disponible")
+    .select("id, nombre, precio, tipo, foto_url, disponible, etiquetas")
     .eq("vianderas_id", viandera.id)
     .order("created_at", { ascending: false });
 
