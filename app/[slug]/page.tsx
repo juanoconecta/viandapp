@@ -17,11 +17,12 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const supabase = await createClient();
+  const slugNormalizado = normalizarSlug(slug);
 
   const { data: viandera } = await supabase
     .from("vianderas")
     .select("nombre, bio, activo")
-    .eq("slug", normalizarSlug(slug))
+    .eq("slug", slugNormalizado)
     .maybeSingle();
 
   if (!viandera || !viandera.activo) {
@@ -30,7 +31,8 @@ export async function generateMetadata({
 
   return {
     title: `${viandera.nombre} — ViandApp`,
-    description: viandera.bio ?? `Viandas caseras de ${viandera.nombre} en Rafaela.`,
+    description: viandera.bio || `Viandas caseras de ${viandera.nombre} en Rafaela.`,
+    alternates: { canonical: `/${slugNormalizado}` },
   };
 }
 
@@ -54,7 +56,7 @@ export default async function VianderaPublicaPage({
 
   const { data: platos } = await supabase
     .from("viandas")
-    .select("id, nombre, precio, tipo, foto_url, etiquetas")
+    .select("id, nombre, descripcion, precio, tipo, foto_url, etiquetas")
     .eq("vianderas_id", viandera.id)
     .eq("disponible", true)
     .order("created_at", { ascending: false });
@@ -112,6 +114,11 @@ export default async function VianderaPublicaPage({
                     <p className="text-sm font-medium text-ink">
                       {plato.nombre}
                     </p>
+                    {plato.descripcion && (
+                      <p className="mt-0.5 text-xs text-ink/60">
+                        {plato.descripcion}
+                      </p>
+                    )}
                     <p className="text-xs text-ink/50">
                       {TIPO_ETIQUETA[plato.tipo] ?? plato.tipo}
                     </p>

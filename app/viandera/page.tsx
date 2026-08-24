@@ -12,7 +12,7 @@ export default async function VianderaDashboardPage() {
 
   const { data: viandera } = await supabase
     .from("vianderas")
-    .select("id, nombre, activo")
+    .select("id, nombre, activo, slug")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -33,6 +33,16 @@ export default async function VianderaDashboardPage() {
         <p className="text-sm text-ink/60">
           {viandera.activo ? "Perfil activo" : "Perfil inactivo"}
         </p>
+        {viandera.slug && (
+          <a
+            href={`/${viandera.slug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium text-coral hover:text-coral-600"
+          >
+            Ver mi página →
+          </a>
+        )}
       </div>
 
       <div className="mt-8 flex items-center justify-between">

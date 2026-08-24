@@ -17,7 +17,7 @@ export default async function AdminPage() {
   const admin = createAdminClient();
   const { data: vianderas } = await admin
     .from("vianderas")
-    .select("id, nombre, user_id, created_at")
+    .select("id, nombre, slug, user_id, created_at")
     .order("created_at", { ascending: false });
 
   return (
@@ -43,7 +43,12 @@ export default async function AdminPage() {
               key={v.id}
               className="flex items-center justify-between rounded-xl border border-ink/10 bg-card px-4 py-3"
             >
-              <span className="text-sm font-medium text-ink">{v.nombre}</span>
+              <div className="flex flex-col">
+                <span className="text-sm font-medium text-ink">{v.nombre}</span>
+                {v.slug && (
+                  <span className="text-xs text-ink/50">viandapp.ar/{v.slug}</span>
+                )}
+              </div>
               <span
                 className={`text-xs font-medium ${
                   v.user_id ? "text-teal-700" : "text-ink/40"
