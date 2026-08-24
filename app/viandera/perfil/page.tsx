@@ -11,7 +11,7 @@ export default async function PerfilVianderaPage() {
 
   const { data: viandera } = await supabase
     .from("vianderas")
-    .select("nombre, bio, telefono, lat, lng")
+    .select("nombre, bio, telefono, lat, lng, slug")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -24,6 +24,7 @@ export default async function PerfilVianderaPage() {
       <div className="mt-8 rounded-3xl border border-ink/10 bg-card p-6 shadow-sm sm:p-8">
         <FormularioPerfil
           nombreInicial={viandera.nombre}
+          slugInicial={viandera.slug ?? ""}
           bioInicial={viandera.bio ?? ""}
           telefonoInicial={viandera.telefono ?? ""}
           latInicial={viandera.lat}

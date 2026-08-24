@@ -8,6 +8,7 @@ import BotonEnviar from "@/components/ui/BotonEnviar";
 
 type Props = {
   nombreInicial: string;
+  slugInicial: string;
   bioInicial: string;
   telefonoInicial: string;
   latInicial: number | null;
@@ -16,6 +17,7 @@ type Props = {
 
 export default function FormularioPerfil({
   nombreInicial,
+  slugInicial,
   bioInicial,
   telefonoInicial,
   latInicial,
@@ -74,6 +76,23 @@ export default function FormularioPerfil({
           defaultValue={telefonoInicial}
           className={campoClase}
         />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="slug" className="text-sm font-medium text-ink/80">
+          Dirección de tu página
+        </label>
+        <div className="flex items-center gap-1 rounded-xl border border-ink/15 bg-paper px-3.5 py-3 text-sm text-ink/40 transition-colors focus-within:border-coral focus-within:ring-2 focus-within:ring-coral/25">
+          <span>viandapp.ar/</span>
+          <input
+            id="slug"
+            name="slug"
+            type="text"
+            defaultValue={slugInicial}
+            placeholder="se genera solo si lo dejás vacío"
+            className="flex-1 bg-transparent text-ink outline-none placeholder:text-ink/35"
+          />
+        </div>
       </div>
 
       <div className="flex flex-col gap-1.5">

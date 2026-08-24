@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { pathDesdeFotoUrl, fotoUrlDesdePath } from "@/lib/viandera/storage";
+import { generarSlugDisponible, normalizarSlug, esSlugReservado } from "@/lib/viandera/slug";
 import type { Database, TipoVianda } from "@/types";
 
 async function obtenerVianderaId(
@@ -53,6 +54,7 @@ export async function actualizarPerfil(
   const nombre = String(formData.get("nombre") ?? "").trim();
   const bio = String(formData.get("bio") ?? "").trim();
   const telefono = String(formData.get("telefono") ?? "").trim();
+  const slugDeseado = String(formData.get("slug") ?? "").trim();
   const latRaw = String(formData.get("lat") ?? "");
   const lngRaw = String(formData.get("lng") ?? "");
 
@@ -66,12 +68,39 @@ export async function actualizarPerfil(
     return { status: "error", mensaje: "No pudimos identificar tu perfil." };
   }
 
+  let slug: string;
+  if (slugDeseado) {
+    const normalizado = normalizarSlug(slugDeseado);
+    if (!normalizado || esSlugReservado(normalizado)) {
+      return {
+        status: "error",
+        mensaje: "Esa dirección no está disponible. Probá con otra.",
+      };
+    }
+    const { data: existente } = await supabase
+      .from("vianderas")
+      .select("id")
+      .eq("slug", normalizado)
+      .neq("id", vianderaId)
+      .maybeSingle();
+    if (existente) {
+      return {
+        status: "error",
+        mensaje: "Esa dirección ya la está usando otra viandera.",
+      };
+    }
+    slug = normalizado;
+  } else {
+    slug = await generarSlugDisponible(supabase, nombre, vianderaId);
+  }
+
   const { error } = await supabase
     .from("vianderas")
     .update({
       nombre,
       bio: bio || null,
       telefono: telefono || null,
+      slug,
       lat: latRaw ? Number(latRaw) : null,
       lng: lngRaw ? Number(lngRaw) : null,
     })

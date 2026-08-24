@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esAdmin } from "@/lib/auth/admin";
+import { generarSlugDisponible } from "@/lib/viandera/slug";
 
 export type EstadoInvitacion =
   | { status: "idle" }
@@ -31,6 +32,7 @@ export async function invitarViandera(
   }
 
   const admin = createAdminClient();
+  const slug = await generarSlugDisponible(admin, nombre);
 
   const { data: viandera, error: errorInsert } = await admin
     .from("vianderas")
@@ -42,7 +44,7 @@ export async function invitarViandera(
       telefono: null,
       activo: true,
       user_id: null,
-      slug: null,
+      slug,
     })
     .select("id")
     .single();
