@@ -6,6 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { pathDesdeFotoUrl, fotoUrlDesdePath } from "@/lib/viandera/storage";
 import { generarSlugDisponible, normalizarSlug, esSlugReservado } from "@/lib/viandera/slug";
+import { ETIQUETAS_DIETARIAS } from "@/lib/viandera/etiquetas";
 import type { Database, TipoVianda } from "@/types";
 
 async function obtenerVianderaId(
@@ -107,6 +108,12 @@ export async function actualizarPerfil(
     .eq("id", vianderaId);
 
   if (error) {
+    if (error.code === "23505") {
+      return {
+        status: "error",
+        mensaje: "Esa dirección ya la está usando otra viandera.",
+      };
+    }
     return {
       status: "error",
       mensaje: "No pudimos guardar los cambios. Probá de nuevo.",
@@ -174,7 +181,10 @@ export async function crearPlato(
   const precioRaw = String(formData.get("precio") ?? "");
   const tipo = String(formData.get("tipo") ?? "") as TipoVianda;
   const foto = formData.get("foto");
-  const etiquetas = formData.getAll("etiquetas").map(String);
+  const etiquetasEnviadas = formData.getAll("etiquetas").map(String);
+  const etiquetas = etiquetasEnviadas.filter((valor) =>
+    ETIQUETAS_DIETARIAS.some((et) => et.valor === valor),
+  );
 
   if (!nombre || !tipo) {
     return { status: "error", mensaje: "Completá el nombre y el tipo." };
@@ -224,7 +234,10 @@ export async function actualizarPlato(
   const tipo = String(formData.get("tipo") ?? "") as TipoVianda;
   const disponible = formData.get("disponible") === "on";
   const foto = formData.get("foto");
-  const etiquetas = formData.getAll("etiquetas").map(String);
+  const etiquetasEnviadas = formData.getAll("etiquetas").map(String);
+  const etiquetas = etiquetasEnviadas.filter((valor) =>
+    ETIQUETAS_DIETARIAS.some((et) => et.valor === valor),
+  );
 
   if (!platoId || !nombre || !tipo) {
     return { status: "error", mensaje: "Completá el nombre y el tipo." };

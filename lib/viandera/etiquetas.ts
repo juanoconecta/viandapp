@@ -1,7 +1,7 @@
 export const ETIQUETAS_DIETARIAS = [
   { valor: "vegetariano", etiqueta: "Vegetariano" },
   { valor: "vegano", etiqueta: "Vegano" },
-  { valor: "sin-tacc", etiqueta: "Sin TACC" },
+  { valor: "sin-tacc", etiqueta: "Sin TACC (celíaco)" },
   { valor: "apto-diabetico", etiqueta: "Apto diabético" },
   { valor: "sin-lactosa", etiqueta: "Sin lactosa" },
   { valor: "picante", etiqueta: "Picante" },

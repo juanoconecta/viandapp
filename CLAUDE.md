@@ -78,6 +78,11 @@ landing (crema + serif editorial + acento terracota).
   siguiente. Si un form necesita animarse, usar `motion` solo en el estado que
   aparece (`initial`/`animate` sin `exit`) y dejar que React swapee el `<form>`
   nativo directo, sin `AnimatePresence` alrededor.
+- La lista de palabras reservadas para slugs de viandera
+  (`lib/viandera/slug.ts`, `RUTAS_RESERVADAS`) debe reflejar cada ruta que
+  exista a nivel raíz de `app/`. Si se agrega una ruta nueva ahí (ej.
+  `/vianderas` para una futura página de exploración), sumarla también a
+  esa lista.
 
 ## Variables de entorno (`.env.local`)
 
@@ -254,3 +259,14 @@ Panel de viandera (agregado 2026-08-22): las vianderas invitadas desde
 con un pin arrastrable en el mapa) y administran su menú completo, con
 fotos reales en Supabase Storage. `/admin` es un panel de un solo admin
 (chequeado por `ADMIN_EMAIL`), no un sistema de roles.
+
+Vidriera pública de la viandera (agregado 2026-08-24): cada viandera tiene
+una página pública en `viandapp.ar/{slug}` (`app/[slug]/page.tsx`), sin
+autenticación, que muestra su perfil y sus platos disponibles — el slug se
+genera automáticamente del nombre al invitar o guardar el perfil por
+primera vez, y es editable después desde `/viandera/perfil`. Los platos
+también tienen etiquetas dietarias (`viandas.etiquetas`, lista fija de 7
+valores en `lib/viandera/etiquetas.ts`). El mockup estático "Doña Rosa" en
+la landing (`components/landing/PreviewPerfil.tsx`) sigue ahí sin cambios
+— es contenido de ejemplo para la landing, no reemplazado por esta
+funcionalidad.

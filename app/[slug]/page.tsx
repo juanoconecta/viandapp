@@ -1,6 +1,38 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ETIQUETAS_DIETARIAS } from "@/lib/viandera/etiquetas";
+import { normalizarSlug } from "@/lib/viandera/slug";
+
+const TIPO_ETIQUETA: Record<string, string> = {
+  almuerzo: "Almuerzo",
+  cena: "Cena",
+  ambos: "Almuerzo y cena",
+};
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const supabase = await createClient();
+
+  const { data: viandera } = await supabase
+    .from("vianderas")
+    .select("nombre, bio, activo")
+    .eq("slug", normalizarSlug(slug))
+    .maybeSingle();
+
+  if (!viandera || !viandera.activo) {
+    return { title: "ViandApp" };
+  }
+
+  return {
+    title: `${viandera.nombre} — ViandApp`,
+    description: viandera.bio ?? `Viandas caseras de ${viandera.nombre} en Rafaela.`,
+  };
+}
 
 export default async function VianderaPublicaPage({
   params,
@@ -13,7 +45,7 @@ export default async function VianderaPublicaPage({
   const { data: viandera } = await supabase
     .from("vianderas")
     .select("id, nombre, bio, telefono, activo")
-    .eq("slug", slug)
+    .eq("slug", normalizarSlug(slug))
     .maybeSingle();
 
   if (!viandera || !viandera.activo) {
@@ -47,9 +79,9 @@ export default async function VianderaPublicaPage({
             {iniciales}
           </div>
           <div className="flex-1">
-            <p className="font-display font-semibold leading-tight">
+            <h1 className="font-display font-semibold leading-tight">
               {viandera.nombre}
-            </p>
+            </h1>
             {viandera.bio && (
               <p className="text-xs text-white/75">{viandera.bio}</p>
             )}
@@ -80,7 +112,9 @@ export default async function VianderaPublicaPage({
                     <p className="text-sm font-medium text-ink">
                       {plato.nombre}
                     </p>
-                    <p className="text-xs text-ink/50">{plato.tipo}</p>
+                    <p className="text-xs text-ink/50">
+                      {TIPO_ETIQUETA[plato.tipo] ?? plato.tipo}
+                    </p>
                     {plato.etiquetas.length > 0 && (
                       <div className="mt-1 flex flex-wrap gap-1">
                         {plato.etiquetas.map((valor) => {

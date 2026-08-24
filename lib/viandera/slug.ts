@@ -30,11 +30,10 @@ export async function generarSlugDisponible(
   nombreODeseado: string,
   vianderaIdAExcluir?: string,
 ): Promise<string> {
-  const base = normalizarSlug(nombreODeseado) || "viandera";
+  const base = normalizarSlug(nombreODeseado) || "cocina";
   let candidato = base;
   let sufijo = 2;
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     if (!esSlugReservado(candidato)) {
       let query = supabase.from("vianderas").select("id").eq("slug", candidato);
