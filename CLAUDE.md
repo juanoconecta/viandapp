@@ -227,6 +227,16 @@ create policy "viandera borra fotos de su propia carpeta"
   );
 ```
 
+Agregado para la vidriera pública de la viandera (`/{slug}`):
+
+```sql
+alter table vianderas
+  add column slug text unique;
+
+alter table viandas
+  add column etiquetas text[] not null default '{}';
+```
+
 ## Estado del proyecto
 
 Pivot a landing page (2026-08-20): antes de tener vianderas reales, un mapa vacío
