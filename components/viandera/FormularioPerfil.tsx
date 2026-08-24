@@ -46,6 +46,7 @@ export default function FormularioPerfil({
           name="nombre"
           type="text"
           required
+          maxLength={100}
           defaultValue={nombreInicial}
           className={campoClase}
         />
@@ -59,6 +60,7 @@ export default function FormularioPerfil({
           id="bio"
           name="bio"
           rows={3}
+          maxLength={500}
           defaultValue={bioInicial}
           className={`${campoClase} resize-none`}
         />
@@ -73,6 +75,7 @@ export default function FormularioPerfil({
           name="telefono"
           type="text"
           inputMode="tel"
+          maxLength={30}
           defaultValue={telefonoInicial}
           className={campoClase}
         />
@@ -88,6 +91,7 @@ export default function FormularioPerfil({
             id="slug"
             name="slug"
             type="text"
+            maxLength={60}
             defaultValue={slugInicial}
             placeholder="se genera solo si lo dejás vacío"
             className="flex-1 bg-transparent text-ink outline-none placeholder:text-ink/35"

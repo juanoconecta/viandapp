@@ -48,6 +48,10 @@ export default function SelectorUbicacion({ lat, lng, onChange }: Props) {
     const centro: [number, number] =
       lat != null && lng != null ? [lng, lat] : RAFAELA_CENTER;
 
+    if (lat == null || lng == null) {
+      onChangeRef.current(centro[1], centro[0]);
+    }
+
     mapRef.current = new Map({
       container: containerRef.current,
       style: STYLE,

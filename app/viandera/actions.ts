@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { pathDesdeFotoUrl, fotoUrlDesdePath } from "@/lib/viandera/storage";
+import { pathDesdeFotoUrl } from "@/lib/viandera/storage";
 import { generarSlugDisponible, normalizarSlug, esSlugReservado } from "@/lib/viandera/slug";
 import { ETIQUETAS_DIETARIAS } from "@/lib/viandera/etiquetas";
 import type { Database, TipoVianda } from "@/types";
@@ -34,11 +34,15 @@ export async function alternarDisponibilidad(formData: FormData): Promise<void> 
   const vianderaId = await obtenerVianderaId(supabase);
   if (!vianderaId) redirect("/app");
 
-  await supabase
+  const { error } = await supabase
     .from("viandas")
     .update({ disponible: !disponibleActual })
     .eq("id", viandaId)
     .eq("vianderas_id", vianderaId);
+
+  if (error) {
+    console.error("alternarDisponibilidad falló:", error.message);
+  }
 
   revalidatePath("/viandera");
 }
@@ -52,10 +56,10 @@ export async function actualizarPerfil(
   _prevState: EstadoPerfil,
   formData: FormData,
 ): Promise<EstadoPerfil> {
-  const nombre = String(formData.get("nombre") ?? "").trim();
-  const bio = String(formData.get("bio") ?? "").trim();
-  const telefono = String(formData.get("telefono") ?? "").trim();
-  const slugDeseado = String(formData.get("slug") ?? "").trim();
+  const nombre = String(formData.get("nombre") ?? "").trim().slice(0, 100);
+  const bio = String(formData.get("bio") ?? "").trim().slice(0, 500);
+  const telefono = String(formData.get("telefono") ?? "").trim().slice(0, 30);
+  const slugDeseado = String(formData.get("slug") ?? "").trim().slice(0, 60);
   const latRaw = String(formData.get("lat") ?? "");
   const lngRaw = String(formData.get("lng") ?? "");
 
@@ -138,11 +142,15 @@ export async function borrarPlato(formData: FormData): Promise<void> {
     .eq("vianderas_id", vianderaId)
     .maybeSingle();
 
-  await supabase
+  const { error } = await supabase
     .from("viandas")
     .delete()
     .eq("id", viandaId)
     .eq("vianderas_id", vianderaId);
+
+  if (error) {
+    console.error("borrarPlato falló:", error.message);
+  }
 
   if (plato?.foto_url) {
     const path = pathDesdeFotoUrl(plato.foto_url);
@@ -156,28 +164,41 @@ export type EstadoPlato =
   | { status: "idle" }
   | { status: "error"; mensaje: string };
 
+const TIPOS_FOTO_PERMITIDOS = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const EXTENSION_POR_TIPO: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+const TAMANO_MAXIMO_FOTO = 5 * 1024 * 1024; // 5MB
+
+function fotoValida(foto: File): boolean {
+  return TIPOS_FOTO_PERMITIDOS.has(foto.type) && foto.size <= TAMANO_MAXIMO_FOTO;
+}
+
 async function subirFoto(
   supabase: SupabaseClient<Database>,
   vianderaId: string,
   foto: File,
 ): Promise<string | null> {
-  const extension = foto.name.split(".").pop() || "jpg";
-  const path = `${vianderaId}/${Date.now()}.${extension}`;
+  const extension = EXTENSION_POR_TIPO[foto.type];
+  const path = `${vianderaId}/${crypto.randomUUID()}.${extension}`;
 
   const { error } = await supabase.storage
     .from("platos")
     .upload(path, foto, { contentType: foto.type, upsert: false });
 
   if (error) return null;
-  return fotoUrlDesdePath(path);
+  return supabase.storage.from("platos").getPublicUrl(path).data.publicUrl;
 }
 
 export async function crearPlato(
   _prevState: EstadoPlato,
   formData: FormData,
 ): Promise<EstadoPlato> {
-  const nombre = String(formData.get("nombre") ?? "").trim();
-  const descripcion = String(formData.get("descripcion") ?? "").trim();
+  const nombre = String(formData.get("nombre") ?? "").trim().slice(0, 100);
+  const descripcion = String(formData.get("descripcion") ?? "").trim().slice(0, 500);
   const precioRaw = String(formData.get("precio") ?? "");
   const tipo = String(formData.get("tipo") ?? "") as TipoVianda;
   const foto = formData.get("foto");
@@ -188,6 +209,13 @@ export async function crearPlato(
 
   if (!nombre || !tipo) {
     return { status: "error", mensaje: "Completá el nombre y el tipo." };
+  }
+
+  if (foto instanceof File && foto.size > 0 && !fotoValida(foto)) {
+    return {
+      status: "error",
+      mensaje: "La foto debe ser una imagen (JPG, PNG, WEBP o GIF) de hasta 5MB.",
+    };
   }
 
   const supabase = await createClient();
@@ -205,7 +233,7 @@ export async function crearPlato(
     vianderas_id: vianderaId,
     nombre,
     descripcion: descripcion || null,
-    precio: precioRaw ? Number(precioRaw) : null,
+    precio: precioRaw ? Math.min(999999, Math.max(0, Number(precioRaw))) : null,
     tipo,
     foto_url: fotoUrl,
     disponible: true,
@@ -228,8 +256,8 @@ export async function actualizarPlato(
   formData: FormData,
 ): Promise<EstadoPlato> {
   const platoId = String(formData.get("platoId") ?? "");
-  const nombre = String(formData.get("nombre") ?? "").trim();
-  const descripcion = String(formData.get("descripcion") ?? "").trim();
+  const nombre = String(formData.get("nombre") ?? "").trim().slice(0, 100);
+  const descripcion = String(formData.get("descripcion") ?? "").trim().slice(0, 500);
   const precioRaw = String(formData.get("precio") ?? "");
   const tipo = String(formData.get("tipo") ?? "") as TipoVianda;
   const disponible = formData.get("disponible") === "on";
@@ -241,6 +269,13 @@ export async function actualizarPlato(
 
   if (!platoId || !nombre || !tipo) {
     return { status: "error", mensaje: "Completá el nombre y el tipo." };
+  }
+
+  if (foto instanceof File && foto.size > 0 && !fotoValida(foto)) {
+    return {
+      status: "error",
+      mensaje: "La foto debe ser una imagen (JPG, PNG, WEBP o GIF) de hasta 5MB.",
+    };
   }
 
   const supabase = await createClient();
@@ -279,7 +314,7 @@ export async function actualizarPlato(
     .update({
       nombre,
       descripcion: descripcion || null,
-      precio: precioRaw ? Number(precioRaw) : null,
+      precio: precioRaw ? Math.min(999999, Math.max(0, Number(precioRaw))) : null,
       tipo,
       disponible,
       foto_url: fotoUrl,

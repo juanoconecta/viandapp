@@ -50,6 +50,7 @@ export default function FormularioPlato({
           name="nombre"
           type="text"
           required
+          maxLength={100}
           defaultValue={valoresIniciales?.nombre}
           className={campoClase}
           placeholder="Ej: Milanesa con puré"
@@ -67,6 +68,7 @@ export default function FormularioPlato({
           id="descripcion"
           name="descripcion"
           rows={3}
+          maxLength={500}
           defaultValue={valoresIniciales?.descripcion}
           className={`${campoClase} resize-none`}
         />
@@ -82,6 +84,7 @@ export default function FormularioPlato({
             name="precio"
             type="number"
             min="0"
+            max="999999"
             step="1"
             defaultValue={valoresIniciales?.precio}
             className={campoClase}
