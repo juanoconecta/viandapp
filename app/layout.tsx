@@ -17,6 +17,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://viandapp.ar"),
   title: "ViandApp — Viandas caseras en Rafaela",
   description:
     "Encontrá tu viandera más cerca. Viandas caseras en Rafaela, pedí sin intermediarios.",
