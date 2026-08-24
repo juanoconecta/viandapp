@@ -9,6 +9,7 @@ export type Viandera = {
   telefono: string | null;
   activo: boolean;
   user_id: string | null;
+  slug: string | null;
   created_at: string;
 };
 
@@ -21,6 +22,7 @@ export type Vianda = {
   tipo: TipoVianda;
   foto_url: string | null;
   disponible: boolean;
+  etiquetas: string[];
   created_at: string;
 };
 

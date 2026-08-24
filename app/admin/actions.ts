@@ -42,6 +42,7 @@ export async function invitarViandera(
       telefono: null,
       activo: true,
       user_id: null,
+      slug: null,
     })
     .select("id")
     .single();

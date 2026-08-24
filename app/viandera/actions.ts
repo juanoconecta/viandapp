@@ -169,6 +169,7 @@ export async function crearPlato(
     tipo,
     foto_url: fotoUrl,
     disponible: true,
+    etiquetas: [],
   });
 
   if (error) {
