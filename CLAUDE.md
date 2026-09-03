@@ -289,16 +289,28 @@ la landing (`components/landing/PreviewPerfil.tsx`) sigue ahí sin cambios
 — es contenido de ejemplo para la landing, no reemplazado por esta
 funcionalidad.
 
-Explorador de consumidores en construcción (arrancado 2026-09-03, en curso):
-se está implementando `/explorar`, una vidriera pública para que un
-consumidor busque viandas por texto/tipo/etiqueta/modalidad sin
-registrarse, siguiendo
+Explorador de consumidores, MVP navegable completo, en preparación de
+lanzamiento (arrancado 2026-09-03): `/explorar` (búsqueda pública por
+texto/tipo/etiqueta/modalidad, sin registro) y el rediseño de `/{slug}`
+(selección de plato + confirmación antes de WhatsApp) están implementados
+y aprobados, en la rama `feat/explorador-mvp-task1`, siguiendo
 `docs/superpowers/plans/2026-09-03-viandapp-explorador-mvp-implementation-plan.md`
 (spec en `docs/superpowers/specs/2026-09-03-explorador-consumidores-design.md`).
 `/` sigue siendo la landing de captación de vianderas — esta entrega no la
 reemplaza. Sin mapa, geolocalización, carrito ni checkout en esta primera
-vuelta (ver "Siguiente entrega" en el spec). Migración de datos versionada
-en `supabase/migrations/`, todavía sin aplicar en producción — no asumir
-que las columnas nuevas (`barrio`, `ofrece_retiro`, `ofrece_envio`,
-`updated_at`, tabla `eventos_analitica`) ya existen en el Supabase real
-hasta confirmarlo.
+vuelta (ver "Siguiente entrega" en el spec).
+
+**Analítica pausada a propósito** (Task 9 del plan): `lib/analitica/eventos.ts`
+ya está implementado y probado (sanitización, reglas por evento, 61 tests),
+pero deliberadamente no está conectado a la interfaz todavía — se decidió
+no retrasar la validación de mercado del MVP navegable con el diseño del
+limitador de solicitudes y costo, que sigue sin resolver (ver Task 9). No
+hay ninguna escritura activa en `eventos_analitica` hoy.
+
+Migración de datos versionada en `supabase/migrations/`, todavía sin
+aplicar en producción — no asumir que las columnas nuevas (`barrio`,
+`ofrece_retiro`, `ofrece_envio`, `updated_at`, tabla `eventos_analitica`)
+ya existen en el Supabase real hasta confirmarlo. Es aditiva e idempotente
+(sin drops, con `if not exists` / `create or replace` en todo lo que
+corresponde) — segura de aplicar sin backup especial más allá de los
+backups automáticos que ya mantiene Supabase.

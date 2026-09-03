@@ -496,7 +496,7 @@ El primer viewport contiene buscador, título y filtros. Debajo se muestran resu
 
 - [ ] **Step 4: No instrumentar todavía**
 
-Esta tarea NO registra `explore_viewed`, `search_submitted` ni `filter_applied` — ninguna escritura en `eventos_analitica` puede existir antes de que exista un limitador de solicitudes y costo, y ese limitador todavía no se construyó en el plan (se construye en la Task 7, Step 5). `/explorar` se publica sin analítica en esta entrega; la instrumentación de estos tres eventos se hace recién en la Task 7 (Step 7), junto con los cuatro eventos del perfil, después de que el limitador exista.
+Esta tarea NO registra `explore_viewed`, `search_submitted` ni `filter_applied` — ninguna escritura en `eventos_analitica` puede existir antes de que exista un limitador de solicitudes y costo. `/explorar` se publica sin analítica en esta entrega; la instrumentación de estos tres eventos, junto con los cuatro eventos del perfil, se movió a la **Task 9** (entrega posterior, pausada a pedido explícito — ver esa sección), después de que el limitador exista.
 
 - [ ] **Step 5: Validar**
 
@@ -522,35 +522,43 @@ git commit -m "feat: launch public vianda explorer"
 
 ## Task 7: Rediseñar el perfil público y medir WhatsApp
 
+**Estado: completada (parte visual y funcional) — aprobada por Codex el
+2026-09-03.** La analítica y el limitador de solicitudes que originalmente
+compartían esta tarea (los antiguos Steps 5–7) se separaron a la **Task 9**
+como entrega posterior, pausada a pedido explícito para no retrasar la
+validación de mercado — ver esa sección. El diseño y el código de
+analítica ya construidos en la Task 4 (`lib/analitica/eventos.ts` y sus
+pruebas) **no se tocaron ni se eliminaron**, solo quedan sin conectar a la
+interfaz todavía.
+
 **Files:**
 
 - Modify: `app/[slug]/page.tsx`
-- Modify: `app/explorar/page.tsx`
 - Create: `components/storefront/StorefrontHeader.tsx`
 - Create: `components/storefront/PublicDishCard.tsx`
 - Create: `components/storefront/WhatsAppIntent.tsx`
 - Create: `components/storefront/StickyContactBar.tsx`
-- Create: `app/actions/analitica.ts`
-- Create: el o los archivos del limitador de solicitudes y costo (nombre y ubicación a definir en el Step 5 — ver nota sobre infraestructura externa)
+- Create: `lib/viandera/telefono.ts` (surgido durante la implementación — `telefonoParaWhatsapp` vive aparte porque `WhatsAppIntent.tsx` es `"use client"` y `page.tsx`, un Server Component, no puede invocar una función exportada de un módulo cliente)
+- Create: `app/[slug]/error.tsx` (surgido durante la implementación — mismo patrón que `app/explorar/error.tsx`, requerido por el estado "Error de carga" del spec)
 
 **Interfaces:**
 
-- Consumes: `registrarEvento`, campos nuevos de `Viandera`.
-- Produces: recorrido perfil → confirmación → WhatsApp; un limitador de solicitudes y costo, durable y comprobable; `app/actions/analitica.ts` como única acción pública que expone `registrarEvento` al cliente, siempre detrás del limitador; instrumentación de los siete eventos del explorador y del perfil (diferida desde la Task 6).
+- Consumes: campos nuevos de `Viandera`.
+- Produces: recorrido perfil → confirmación → WhatsApp.
 
-- [ ] **Step 1: Extraer presentación sin cambiar la consulta todavía**
+- [x] **Step 1: Extraer presentación sin cambiar la consulta todavía**
 
 Separar cabecera y platos. Mostrar únicamente nombre, bio, barrio, modalidad y fecha de actualización. No mostrar ratings ni sellos.
 
-- [ ] **Step 2: Crear selección de plato**
+- [x] **Step 2: Crear selección de plato**
 
 Cada tarjeta puede marcar un plato para preparar el mensaje. El CTA sigue siendo comprensible sin selección: “Consultar por WhatsApp”.
 
-- [ ] **Step 3: Crear confirmación accesible**
+- [x] **Step 3: Crear confirmación accesible**
 
 El diálogo debe explicar que disponibilidad, entrega y pago se coordinan directamente. Debe aceptar Escape, devolver el foco y respetar `prefers-reduced-motion`.
 
-- [ ] **Step 4: Preparar el enlace**
+- [x] **Step 4: Preparar el enlace**
 
 Formato:
 
@@ -562,26 +570,7 @@ const mensaje = plato
 
 Codificar con `encodeURIComponent`. No incluir precio, dirección ni promesas.
 
-- [ ] **Step 5: Construir primero el limitador de solicitudes y costo**
-
-Ninguna escritura en `eventos_analitica` puede conectarse — ni la de esta tarea ni la diferida de la Task 6 — antes de que este limitador exista y esté probado. Debe ser durable (sobrevive a un restart del proceso; nada en memoria de un solo servidor) y comprobable (una prueba puede demostrar que el límite corta la escritura al superarse, no solo que la función existe). Cubre dos dimensiones: un límite global (todo `eventos_analitica`) y uno por sesión/visitante, ambos en una ventana de tiempo.
-
-La elección concreta del mecanismo (tabla propia en Supabase con conteo por ventana, KV/Redis administrado, u otra infraestructura) **no está decidida por este plan** y no debe inventarse en la implementación sin que antes se proponga y se apruebe explícitamente — en particular si requiere aprovisionar infraestructura externa nueva (ej. un servicio de Redis administrado), eso se resuelve y se aprueba antes de ejecutar este Step, no durante. Si la opción aprobada es una tabla propia en Supabase, va a necesitar su propia migración versionada (mismo patrón que `supabase/migrations/202609030001_explorador_mvp.sql`), sujeta a la misma regla de no aplicarse en producción sin confirmación explícita.
-
-- [ ] **Step 6: Crear la acción pública de analítica detrás del limitador**
-
-Crear `app/actions/analitica.ts` (`"use server"`) recién en este punto, después de que el limitador del Step 5 exista. Debe exponer una acción mínima que consulte el limitador antes de delegar en `registrarEvento` (nunca importar `createAdminClient` directamente); si el límite está superado, la acción descarta el evento en silencio, igual que un payload inválido — nunca revienta el recorrido del usuario. `registrarEvento` ya vuelve a sanitizar internamente — la acción no debe confiar en el payload del navegador ni ampliar ese contrato.
-
-- [ ] **Step 7: Instrumentar los siete eventos — explorador y perfil**
-
-Recién ahora se conectan los siete eventos, todos detrás del limitador del Step 5:
-
-- En `app/explorar/page.tsx` (diferido desde la Task 6): `explore_viewed`, `search_submitted`, `filter_applied` — sin bloquear render ni incluir el texto completo de búsqueda en metadata; como máximo guardar longitud de búsqueda y filtros enumerados.
-- En `app/[slug]/page.tsx` y los componentes de storefront: `profile_viewed`, `dish_selected`, `whatsapp_intent`, `whatsapp_clicked`. El último significa clic confirmado en “Continuar a WhatsApp”, no apertura comprobada de la app externa.
-
-`profile_viewed`, `explore_viewed`, `search_submitted` y `filter_applied` pueden registrarse server-side directo en el Server Component correspondiente (sin pasar por la acción); `dish_selected`, `whatsapp_intent` y `whatsapp_clicked` nacen de interacciones de cliente y usan la acción del Step 6. La salida a WhatsApp debe funcionar aunque falle la analítica.
-
-- [ ] **Step 8: Verificar estados**
+- [x] **Step 5: Verificar estados**
 
 - Perfil sin platos.
 - Perfil sin teléfono.
@@ -590,7 +579,7 @@ Recién ahora se conectan los siete eventos, todos detrás del limitador del Ste
 - Bio y nombres largos.
 - Foto ausente.
 
-- [ ] **Step 9: Validar**
+- [x] **Step 6: Validar**
 
 Run:
 
@@ -601,14 +590,17 @@ npx tsc --noEmit
 npm run build
 ```
 
-- [ ] **Step 10: Commit**
-
-Agregar también los archivos del limitador de solicitudes y costo del Step 5 (su ruta exacta se define ahí) a este `git add`, junto con la migración correspondiente si el limitador aprobado usa una tabla propia en Supabase.
+- [x] **Step 7: Commit**
 
 ```bash
-git add app/[slug]/page.tsx app/explorar/page.tsx components/storefront app/actions/analitica.ts
-git commit -m "feat: redesign storefront and track WhatsApp intent"
+git add app/[slug]/page.tsx components/storefront app/[slug]/error.tsx
+git commit -m "feat: redesign public storefront with WhatsApp confirmation"
 ```
+
+Commits reales: `d51aab2` (implementación) y `47620e1` (corrección de
+revisión: `StickyContactBar` bajo `overflow-hidden` no se pegaba durante
+scroll real, y podía renderizar una barra vacía o un link `wa.me` inválido
+con un teléfono compuesto solo por símbolos).
 
 ---
 
@@ -619,7 +611,9 @@ git commit -m "feat: redesign storefront and track WhatsApp intent"
 - Modify only files that fail verification.
 - Modify: `CLAUDE.md` after production prerequisites are confirmed.
 
-**Interfaces:** complete vertical slice.
+**Interfaces:** slice vertical navegable de exploración → perfil → WhatsApp,
+sin analítica — la analítica es la Task 9, entrega posterior pausada a
+pedido explícito, y no bloquea este lanzamiento.
 
 - [ ] **Step 1: Aplicar la migración en el entorno acordado**
 
@@ -646,9 +640,11 @@ Probar:
 
 Revisar 320, 375, 768, 1024 y 1440 px; orientación vertical/horizontal; teclado; zoom de texto 200%.
 
-- [ ] **Step 5: Verificación analítica**
+- [ ] **Step 5: Verificación analítica — N/A para este lanzamiento**
 
-Confirmar que los siete eventos llegan, que un fallo de inserción no rompe la UI, que metadata no contiene PII y que los roles públicos no pueden insertar directamente en `eventos_analitica`.
+La analítica no se conecta en esta entrega (ver Task 9). Este step se
+retoma dentro de la propia Task 9 cuando esa entrega se ejecute — no
+bloquea el lanzamiento actual.
 
 - [ ] **Step 6: Lighthouse y accesibilidad**
 
@@ -666,6 +662,76 @@ npm run build
 ```
 
 Si la verificación no exigió cambios, no crear un commit vacío. Si hubo correcciones, revisar `git diff --name-only`, agregar únicamente esos archivos por nombre explícito y crear `fix: complete explorer launch verification`.
+
+---
+
+## Task 9: Analítica del explorador (entrega posterior — pausada)
+
+**Estado: no iniciada, pausada a pedido explícito el 2026-09-03** para no
+retrasar la validación de mercado del MVP navegable (Tasks 1–8). No
+bloquea el lanzamiento de la Task 8. El diseño y la lógica de
+sanitización ya existen y están probados desde la Task 4
+(`lib/analitica/eventos.ts`, `lib/analitica/eventos.test.ts`, 61 tests) —
+esta tarea solo falta conectarlos a la interfaz real. No se elimina ni se
+reescribe nada de lo ya construido; simplemente no se ejecuta todavía.
+Contiene, sin cambios de contenido, lo que antes eran los Steps 5–7 de la
+Task 7 y el Step 5 de la Task 8.
+
+**Files:**
+
+- Create: `app/actions/analitica.ts`
+- Create: el o los archivos del limitador de solicitudes y costo (nombre y ubicación a definir en el Step 1 — ver nota sobre infraestructura externa)
+- Modify: `app/explorar/page.tsx`
+- Modify: `app/[slug]/page.tsx`
+- Modify: los componentes de storefront que disparan `dish_selected`, `whatsapp_intent` y `whatsapp_clicked`
+
+**Interfaces:**
+
+- Consumes: `registrarEvento` (`lib/analitica/eventos.ts`, ya implementado y probado; no requiere cambios).
+- Produces: un limitador de solicitudes y costo, durable y comprobable; `app/actions/analitica.ts` como única acción pública que expone `registrarEvento` al cliente, siempre detrás del limitador; instrumentación de los siete eventos del explorador y del perfil.
+
+- [ ] **Step 1: Construir primero el limitador de solicitudes y costo**
+
+Ninguna escritura en `eventos_analitica` puede conectarse antes de que este limitador exista y esté probado. Debe ser durable (sobrevive a un restart del proceso; nada en memoria de un solo servidor) y comprobable (una prueba puede demostrar que el límite corta la escritura al superarse, no solo que la función existe). Cubre dos dimensiones: un límite global (todo `eventos_analitica`) y uno por sesión/visitante, ambos en una ventana de tiempo.
+
+La elección concreta del mecanismo (tabla propia en Supabase con conteo por ventana, KV/Redis administrado, u otra infraestructura) **no está decidida por este plan** y no debe inventarse en la implementación sin que antes se proponga y se apruebe explícitamente — en particular si requiere aprovisionar infraestructura externa nueva (ej. un servicio de Redis administrado), eso se resuelve y se aprueba antes de ejecutar este Step, no durante. Si la opción aprobada es una tabla propia en Supabase, va a necesitar su propia migración versionada (mismo patrón que `supabase/migrations/202609030001_explorador_mvp.sql`), sujeta a la misma regla de no aplicarse en producción sin confirmación explícita.
+
+- [ ] **Step 2: Crear la acción pública de analítica detrás del limitador**
+
+Crear `app/actions/analitica.ts` (`"use server"`) recién en este punto, después de que el limitador del Step 1 exista. Debe exponer una acción mínima que consulte el limitador antes de delegar en `registrarEvento` (nunca importar `createAdminClient` directamente); si el límite está superado, la acción descarta el evento en silencio, igual que un payload inválido — nunca revienta el recorrido del usuario. `registrarEvento` ya vuelve a sanitizar internamente — la acción no debe confiar en el payload del navegador ni ampliar ese contrato.
+
+- [ ] **Step 3: Instrumentar los siete eventos — explorador y perfil**
+
+Recién ahora se conectan los siete eventos, todos detrás del limitador del Step 1:
+
+- En `app/explorar/page.tsx`: `explore_viewed`, `search_submitted`, `filter_applied` — sin bloquear render ni incluir el texto completo de búsqueda en metadata; como máximo guardar longitud de búsqueda y filtros enumerados.
+- En `app/[slug]/page.tsx` y los componentes de storefront: `profile_viewed`, `dish_selected`, `whatsapp_intent`, `whatsapp_clicked`. El último significa clic confirmado en “Continuar a WhatsApp”, no apertura comprobada de la app externa.
+
+`profile_viewed`, `explore_viewed`, `search_submitted` y `filter_applied` pueden registrarse server-side directo en el Server Component correspondiente (sin pasar por la acción); `dish_selected`, `whatsapp_intent` y `whatsapp_clicked` nacen de interacciones de cliente y usan la acción del Step 2. La salida a WhatsApp debe funcionar aunque falle la analítica.
+
+- [ ] **Step 4: Verificación analítica**
+
+Confirmar que los siete eventos llegan, que un fallo de inserción no rompe la UI, que metadata no contiene PII y que los roles públicos no pueden insertar directamente en `eventos_analitica`.
+
+- [ ] **Step 5: Validar**
+
+Run:
+
+```bash
+npm test
+npm run lint
+npx tsc --noEmit
+npm run build
+```
+
+- [ ] **Step 6: Commit**
+
+Agregar también los archivos del limitador del Step 1 (su ruta exacta se define ahí) a este `git add`, junto con la migración correspondiente si el limitador aprobado usa una tabla propia en Supabase.
+
+```bash
+git add app/actions/analitica.ts app/explorar/page.tsx app/[slug]/page.tsx components/storefront
+git commit -m "feat: connect explorer analytics behind a rate limiter"
+```
 
 ---
 
