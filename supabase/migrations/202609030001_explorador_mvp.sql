@@ -7,7 +7,7 @@ alter table public.vianderas
 alter table public.viandas
   add column if not exists updated_at timestamptz not null default now();
 
-create or replace function public.set_updated_at()
+create or replace function public.viandapp_set_updated_at()
 returns trigger language plpgsql as $$
 begin
   new.updated_at = now();
@@ -18,12 +18,12 @@ $$;
 drop trigger if exists vianderas_set_updated_at on public.vianderas;
 create trigger vianderas_set_updated_at
 before update on public.vianderas
-for each row execute function public.set_updated_at();
+for each row execute function public.viandapp_set_updated_at();
 
 drop trigger if exists viandas_set_updated_at on public.viandas;
 create trigger viandas_set_updated_at
 before update on public.viandas
-for each row execute function public.set_updated_at();
+for each row execute function public.viandapp_set_updated_at();
 
 create table if not exists public.eventos_analitica (
   id uuid primary key default gen_random_uuid(),
@@ -34,7 +34,8 @@ create table if not exists public.eventos_analitica (
   viandera_id uuid references public.vianderas(id) on delete set null,
   vianda_id uuid references public.viandas(id) on delete set null,
   metadata jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  constraint eventos_analitica_metadata_is_object check (jsonb_typeof(metadata) = 'object')
 );
 
 alter table public.eventos_analitica enable row level security;

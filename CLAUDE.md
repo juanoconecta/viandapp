@@ -251,14 +251,14 @@ migrado el entorno real):
 - `vianderas.barrio` (text, nullable), `vianderas.ofrece_retiro` (boolean,
   default `true`), `vianderas.ofrece_envio` (boolean, default `false`),
   `vianderas.updated_at` y `viandas.updated_at` (timestamptz, actualizados
-  automáticamente por un trigger `set_updated_at()` en cada `update`, no
-  se setean a mano desde la app).
+  automáticamente por un trigger `viandapp_set_updated_at()` en cada
+  `update`, no se setean a mano desde la app).
 - Tabla `eventos_analitica` (`id`, `nombre` con `check` a los 7 eventos del
-  explorador, `viandera_id`, `vianda_id`, `metadata` jsonb, `created_at`),
-  con RLS habilitado y **sin ninguna policy** — no hay insert público. La
-  escritura solo va a poder hacerse server-side con `createAdminClient()`
-  (implementado en una tarea posterior del plan del explorador), nunca
-  desde el cliente.
+  explorador, `viandera_id`, `vianda_id`, `metadata` jsonb con `check
+  (jsonb_typeof(metadata) = 'object')`, `created_at`), con RLS habilitado y
+  **sin ninguna policy** — no hay insert público. La escritura solo va a
+  poder hacerse server-side con `createAdminClient()` (implementado en una
+  tarea posterior del plan del explorador), nunca desde el cliente.
 
 ## Estado del proyecto
 

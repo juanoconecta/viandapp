@@ -45,9 +45,6 @@ export async function invitarViandera(
       activo: true,
       user_id: null,
       slug,
-      barrio: null,
-      ofrece_retiro: true,
-      ofrece_envio: false,
     })
     .select("id")
     .single();

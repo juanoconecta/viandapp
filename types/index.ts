@@ -1,5 +1,15 @@
 export type TipoVianda = "almuerzo" | "cena" | "ambos";
 
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
+
+export type JsonObject = { [key: string]: Json | undefined };
+
 export type Viandera = {
   id: string;
   nombre: string;
@@ -55,7 +65,7 @@ export type EventoAnalitica = {
   nombre: NombreEventoAnalitica;
   viandera_id: string | null;
   vianda_id: string | null;
-  metadata: Record<string, string | number | boolean>;
+  metadata: JsonObject;
   created_at: string;
 };
 
@@ -64,7 +74,11 @@ export type Database = {
     Tables: {
       vianderas: {
         Row: Viandera;
-        Insert: Omit<Viandera, "id" | "created_at" | "updated_at">;
+        Insert: Omit<
+          Viandera,
+          "id" | "created_at" | "updated_at" | "barrio" | "ofrece_retiro" | "ofrece_envio"
+        > &
+          Partial<Pick<Viandera, "barrio" | "ofrece_retiro" | "ofrece_envio">>;
         Update: Partial<Omit<Viandera, "id" | "created_at" | "updated_at">>;
         Relationships: [];
       };
@@ -82,7 +96,11 @@ export type Database = {
       };
       eventos_analitica: {
         Row: EventoAnalitica;
-        Insert: Omit<EventoAnalitica, "id" | "created_at">;
+        Insert: Omit<
+          EventoAnalitica,
+          "id" | "created_at" | "viandera_id" | "vianda_id" | "metadata"
+        > &
+          Partial<Pick<EventoAnalitica, "viandera_id" | "vianda_id" | "metadata">>;
         Update: Partial<Omit<EventoAnalitica, "id" | "created_at">>;
         Relationships: [];
       };
