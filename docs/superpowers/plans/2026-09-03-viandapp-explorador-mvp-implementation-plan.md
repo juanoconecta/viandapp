@@ -655,10 +655,10 @@ Crear planes separados después de medir uso real:
 1. Mapa, geolocalización y sincronización lista↔mapa.
 2. Disponibilidad por día, horario y “por encargo”.
 3. Favoritos y cuentas de consumidor.
-4. Monetización Premium según la definición de producto incluida abajo.
+4. Monetización ViandApp+ según la definición de producto incluida abajo.
 5. Ratings y moderación, solo si existe un mecanismo verificable de compra.
 
-### Definición futura: ViandApp Premium
+### Definición futura: ViandApp+
 
 **No forma parte del MVP actual.** Crear una especificación y un plan de implementación separados únicamente cuando el explorador y la analítica estén estables.
 
@@ -670,7 +670,7 @@ Crear planes separados después de medir uso real:
 - Entrevistas de validación con 10–15 vianderas.
 - Evidencia de que algunas recibieron consultas atribuibles a ViandApp.
 
-**Posicionamiento:** suscripción opcional para conseguir más visibilidad, entender el interés de los consumidores y profesionalizar la difusión. Mantener contacto directo y cero comisión por venta en todos los planes.
+**Nombre y posicionamiento:** el nombre comercial aprobado es `ViandApp+` (pronunciado “ViandApp Plus”), no “Premium”. Es una suscripción opcional para conseguir más visibilidad, entender el interés de los consumidores y profesionalizar la difusión. Mantener contacto directo y cero comisión por venta en todos los planes. En código y base de datos usar identificadores estables `free` y `plus`; no guardar textos comerciales como identificadores.
 
 **Plan gratuito:**
 
@@ -681,7 +681,7 @@ Crear planes separados después de medir uso real:
 - Contacto ilimitado por WhatsApp.
 - Enlace y QR para compartir el perfil.
 
-**Premium propuesto:**
+**ViandApp+ propuesto:**
 
 - Panel de visitas, platos vistos, intenciones y clics hacia WhatsApp.
 - Resumen semanal fácil de interpretar.
@@ -702,10 +702,18 @@ Crear planes separados después de medir uso real:
 - No prometer ventas garantizadas.
 - Separar visualmente resultados patrocinados y orgánicos.
 
+**Programa de cocinas fundadoras:**
+
+- Incorporar manualmente las primeras 5–10 cocinas reales.
+- Darles acceso gratuito a ViandApp+ durante seis meses desde la activación.
+- Mostrar “Cocina fundadora” como reconocimiento de participación temprana, nunca como sello de identidad, habilitación o calidad verificada.
+- Informar desde el comienzo la duración del beneficio y el precio que regirá después; no convertir automáticamente a un plan pago sin consentimiento explícito.
+
 **Hipótesis de precio inicial, expresada en pesos argentinos de septiembre de 2026:**
 
-- Premium Fundadoras: ARS 7.900 por mes durante seis meses para las primeras 20–30 altas.
-- Premium regular: ARS 11.900 por mes.
+- Cocinas fundadoras del piloto: ARS 0 durante seis meses para las primeras 5–10 cocinas reales.
+- ViandApp+ lanzamiento: ARS 7.900 por mes para las primeras 20–30 suscriptoras pagas, después del piloto.
+- ViandApp+ regular: ARS 11.900 por mes.
 - Trimestral: ARS 31.900.
 - Prueba: 30 días o hasta registrar 10 consultas, lo que ocurra primero.
 
@@ -716,7 +724,7 @@ Revisar precios cada 60–90 días usando como referencia aproximadamente 1,5 vi
 - Conversión de prueba a pago.
 - Renovación al segundo y tercer mes.
 - Ingreso mensual recurrente.
-- Promedio de clics hacia WhatsApp por viandera Premium y gratuita.
+- Promedio de clics hacia WhatsApp por viandera ViandApp+ y gratuita.
 - Costo de adquirir una viandera paga.
 - Tasa de cancelación y motivo declarado.
 
