@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { telefonoParaWhatsapp } from "@/lib/viandera/telefono";
 
 type PlatoElegido = { id: string; nombre: string } | null;
 
@@ -25,8 +26,9 @@ function construirMensaje(plato: PlatoElegido): string {
  * todas formas neutraliza cualquier transición si algún navegador le
  * agrega una por su cuenta).
  *
- * Si no hay teléfono, no se renderiza nada — nunca un botón deshabilitado
- * sin explicación.
+ * Si no hay teléfono, o el que hay no deja suficientes dígitos utilizables
+ * (ver `telefonoParaWhatsapp`), no se renderiza nada — nunca un botón
+ * deshabilitado sin explicación, ni un link roto a `wa.me`.
  */
 export default function WhatsAppIntent({
   telefono,
@@ -38,10 +40,10 @@ export default function WhatsAppIntent({
   plato: PlatoElegido;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const numeroLimpio = telefonoParaWhatsapp(telefono);
 
-  if (!telefono) return null;
+  if (!numeroLimpio) return null;
 
-  const numeroLimpio = telefono.replace(/\D/g, "");
   const mensaje = construirMensaje(plato);
   const whatsappHref = `https://wa.me/${numeroLimpio}?text=${encodeURIComponent(mensaje)}`;
 

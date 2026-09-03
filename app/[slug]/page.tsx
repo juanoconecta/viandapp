@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { normalizarSlug } from "@/lib/viandera/slug";
+import { telefonoParaWhatsapp } from "@/lib/viandera/telefono";
 import StorefrontHeader from "@/components/storefront/StorefrontHeader";
 import PublicDishCard, {
   type PlatoStorefront,
@@ -102,46 +103,61 @@ export default async function VianderaPublicaPage({
   const platoSeleccionado =
     platos.find((plato) => plato.id === platoIdSeleccionado) ?? null;
 
+  // Decide acá, no solo dentro de `WhatsAppIntent`, si hay algo que
+  // mostrar: así el borde/padding de `StickyContactBar` tampoco se
+  // renderiza cuando no hay un teléfono utilizable.
+  const hayTelefonoUtilizable = Boolean(
+    telefonoParaWhatsapp(viandera.telefono),
+  );
+
   return (
     <div className="mx-auto max-w-md px-4 py-10 sm:px-6">
-      <div className="overflow-hidden rounded-3xl border border-ink/10 bg-card shadow-lg shadow-ink/5">
-        <StorefrontHeader
-          nombre={viandera.nombre}
-          bio={viandera.bio}
-          barrio={viandera.barrio}
-          ofreceRetiro={viandera.ofrece_retiro}
-          ofreceEnvio={viandera.ofrece_envio}
-          actualizadoEn={viandera.updated_at}
-        />
-
-        {platos.length === 0 ? (
-          <p className="px-5 py-6 text-sm text-ink-muted">
-            Está preparando su próximo menú.
-          </p>
-        ) : (
-          <ul className="divide-y divide-ink/10">
-            {platos.map((plato) => (
-              <PublicDishCard
-                key={plato.id}
-                plato={plato}
-                seleccionado={plato.id === platoSeleccionado?.id}
-                hrefSeleccion={
-                  plato.id === platoSeleccionado?.id
-                    ? `/${slugNormalizado}`
-                    : `/${slugNormalizado}?plato=${plato.id}`
-                }
-              />
-            ))}
-          </ul>
-        )}
-
-        <StickyContactBar>
-          <WhatsAppIntent
-            telefono={viandera.telefono}
-            nombreViandera={viandera.nombre}
-            plato={platoSeleccionado}
+      <div className="rounded-3xl shadow-lg shadow-ink/5">
+        <div
+          className={`overflow-hidden rounded-t-3xl border border-ink/10 bg-card ${
+            hayTelefonoUtilizable ? "border-b-0" : "rounded-b-3xl"
+          }`}
+        >
+          <StorefrontHeader
+            nombre={viandera.nombre}
+            bio={viandera.bio}
+            barrio={viandera.barrio}
+            ofreceRetiro={viandera.ofrece_retiro}
+            ofreceEnvio={viandera.ofrece_envio}
+            actualizadoEn={viandera.updated_at}
           />
-        </StickyContactBar>
+
+          {platos.length === 0 ? (
+            <p className="px-5 py-6 text-sm text-ink-muted">
+              Está preparando su próximo menú.
+            </p>
+          ) : (
+            <ul className="divide-y divide-ink/10">
+              {platos.map((plato) => (
+                <PublicDishCard
+                  key={plato.id}
+                  plato={plato}
+                  seleccionado={plato.id === platoSeleccionado?.id}
+                  hrefSeleccion={
+                    plato.id === platoSeleccionado?.id
+                      ? `/${slugNormalizado}`
+                      : `/${slugNormalizado}?plato=${plato.id}`
+                  }
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {hayTelefonoUtilizable && (
+          <StickyContactBar>
+            <WhatsAppIntent
+              telefono={viandera.telefono}
+              nombreViandera={viandera.nombre}
+              plato={platoSeleccionado}
+            />
+          </StickyContactBar>
+        )}
       </div>
     </div>
   );
