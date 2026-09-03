@@ -13,14 +13,21 @@ analítica pausada.
 **Architecture:** `app/(consumer)/page.tsx` compone bloques nuevos, todos
 Server Components salvo uno, bajo `components/landing/`. El único Client
 Component nuevo es `HeroCarousel`; su lógica de reproducción (rotación,
-pausa persistente vía botón, pausa temporal por hover/foco, navegación
-circular, `prefers-reduced-motion`) vive aislada en un módulo puro
-(`lib/carrusel/reproduccion.ts`) sin React ni DOM, testeable con Vitest en
-entorno `node` igual que el resto de `lib/`. La sección "Descubrí qué hay
-para hoy" reutiliza `buscarPlatos` (`lib/viandas/consultas.ts`) sin
-modificarla, dentro de un límite `<Suspense>` propio para no bloquear el
-LCP del hero. `Header.tsx` (compartido por todas las rutas) se extiende
-con enlaces nuevos y un `aria-label` propio; `MobileBottomNav.tsx`
+pausa persistente vía botón, pausa temporal por hover/foco/touch,
+navegación circular, `prefers-reduced-motion`) vive aislada en un módulo
+puro (`lib/carrusel/reproduccion.ts`) sin React ni DOM, testeable con
+Vitest en entorno `node` igual que el resto de `lib/`. El componente
+visual mantiene un índice lógico (a dónde el temporizador/usuario quiere
+ir) separado del índice visible (qué imagen ya terminó de cargar) para
+que el crossfade nunca oculte la imagen actual antes de que la siguiente
+esté lista, y precarga como máximo una imagen por delante del ciclo — ver
+Task 3. La sección "Descubrí qué hay para hoy" reutiliza `buscarPlatos`
+(`lib/viandas/consultas.ts`) sin modificarla, a través de un clasificador
+puro con dependencia inyectable (`lib/viandas/destacados.ts`, también
+testeado con Vitest) que separa resultado/vacío/error del componente
+visual, dentro de un límite `<Suspense>` propio para no bloquear el LCP
+del hero. `Header.tsx` (compartido por todas las rutas) se extiende con
+enlaces nuevos y un `aria-label` propio; `MobileBottomNav.tsx`
 (compartido con `/explorar`) solo cambia su `aria-label`. Ningún otro
 archivo compartido se toca.
 
@@ -62,10 +69,14 @@ plan:
 - **Sin dependencias npm nuevas** para el carrusel — React y APIs del
   navegador ya disponibles alcanzan para todo lo que pide la spec.
 - **`next/image` + `priority` en la primera imagen visible del carrusel,
-  carga diferida en las restantes** — ver Task 3 para el mecanismo exacto
-  (montaje progresivo de imágenes visitadas, no el `loading="lazy"`
-  nativo, que no difiere nada en un carrusel de imágenes apiladas en
-  crossfade — ver la nota técnica en esa tarea).
+  carga diferida en las restantes** — ver Task 3 para el mecanismo exacto:
+  se precarga como máximo **una** imagen por delante del ciclo (nunca las
+  cuatro a la vez), y el crossfade espera a que la imagen destino esté
+  cargada o haya fallado antes de ocultar la que se está mostrando (nunca
+  un intervalo vacío). El `loading="lazy"` nativo no serviría acá: las
+  imágenes están apiladas exactamente en el mismo lugar para el
+  crossfade, así que el navegador las trata como "en viewport" desde el
+  primer render sin importar ese atributo.
 - **Header:** el nav completo (Explorar, Cómo funciona, Sumar mi cocina,
   Ingresar/Mi cuenta) se muestra junto recién desde `lg` (1024 px); por
   debajo, solo logo + Ingresar/Mi cuenta.
@@ -245,6 +256,11 @@ por foto.
 
 - [ ] **Paso 4: Documentar origen y licencia en `CREDITOS.md`**
 
+  Crear `public/portada/CREDITOS.md` con este encabezado y esta tabla
+  **vacía** (sin filas de ejemplo con corchetes — los corchetes no son
+  contenido válido en ningún archivo de esta tarea, ver el script de
+  verificación del Paso 6):
+
   ```markdown
   # Créditos de imágenes — carrusel de la portada
 
@@ -255,15 +271,24 @@ por foto.
 
   | Archivo | Origen | Licencia | Fecha |
   |---|---|---|---|
-  | carrusel-01.webp | [banco/fuente] | [tipo de licencia] | AAAA-MM-DD |
-  | carrusel-02.webp | [banco/fuente] | [tipo de licencia] | AAAA-MM-DD |
-  | carrusel-03.webp | [banco/fuente] | [tipo de licencia] | AAAA-MM-DD |
-  | carrusel-04.webp | [banco/fuente] | [tipo de licencia] | AAAA-MM-DD |
   ```
 
-  Los corchetes se completan con datos reales antes de dar la tarea por
-  terminada — un archivo con corchetes sin completar no pasa el checklist
-  de esta tarea.
+  Completar una fila por cada uno de los 4 archivos, con estos valores
+  reales (esquema de la columna, no texto a copiar):
+
+  - **Archivo:** el nombre exacto (`carrusel-01.webp`, etc.).
+  - **Origen:** `Foto propia de ViandApp` si es una foto tomada para el
+    proyecto, o el nombre real del banco de fotos usado (ej. `Unsplash`,
+    `Pexels`) si es de stock.
+  - **Licencia:** si es foto propia, `Foto propia, sin restricción de
+    terceros`; si es de stock, el nombre real y completo de la licencia
+    bajo la que se descargó (ej. `Unsplash License`, `Pexels License`).
+  - **Fecha:** la fecha real en que se obtuvo/exportó el archivo, en
+    formato ISO `AAAA-MM-DD` con los dígitos reales (ej. `2026-09-10`) —
+    `AAAA-MM-DD` es la especificación del formato, nunca un valor a
+    copiar tal cual.
+
+  Ninguna celda queda vacía ni con corchetes.
 
 - [ ] **Paso 5: Crear `components/landing/carruselDatos.ts`**
 
@@ -284,31 +309,67 @@ por foto.
   export const FOTOS_CARRUSEL: FotoCarrusel[] = [
     {
       src: "/portada/carrusel-01.webp",
-      alt: "[descripción real y específica de la foto 1]",
+      alt: "", // completar: descripción real y específica de esta foto puntual
       esIlustrativa: true,
     },
     {
       src: "/portada/carrusel-02.webp",
-      alt: "[descripción real y específica de la foto 2]",
+      alt: "", // completar: descripción real y específica de esta foto puntual
       esIlustrativa: true,
     },
     {
       src: "/portada/carrusel-03.webp",
-      alt: "[descripción real y específica de la foto 3]",
+      alt: "", // completar: descripción real y específica de esta foto puntual
       esIlustrativa: true,
     },
     {
       src: "/portada/carrusel-04.webp",
-      alt: "[descripción real y específica de la foto 4]",
+      alt: "", // completar: descripción real y específica de esta foto puntual
       esIlustrativa: true,
     },
   ];
   ```
 
-  Cada `alt` se completa con una descripción real del contenido de esa
-  foto puntual (ej. "Milanesa napolitana con puré de papas servida en un
-  contenedor de vianda") — un `alt` con corchetes sin completar, genérico
-  ("foto de comida") o repetido entre fotos no pasa el checklist.
+  Cada `alt: ""` se reemplaza por una oración real, específica de esa
+  foto puntual, de al menos 8 palabras describiendo lo que se ve (ej.
+  "Milanesa napolitana con puré de papas servida en un contenedor de
+  vianda") — nunca genérica ("foto de comida"), nunca vacía, nunca
+  repetida entre las 4 fotos, y nunca copiada de este plan como si fuera
+  el valor final (el comentario `// completar: ...` se borra junto con
+  el `""` que reemplaza).
+
+- [ ] **Paso 6: Verificar automáticamente que no queden placeholders**
+
+  Correr este script antes de commitear — cada verificación imprime
+  `FALLA: ...` y corta con código de salida distinto de cero si algo
+  quedó sin completar:
+
+  ```bash
+  set -e
+
+  if grep -n '\[.*\]' public/portada/CREDITOS.md components/landing/carruselDatos.ts; then
+    echo "FALLA: quedan corchetes de placeholder sin completar"; exit 1
+  fi
+
+  if grep -n 'AAAA-MM-DD' public/portada/CREDITOS.md; then
+    echo "FALLA: falta reemplazar AAAA-MM-DD por una fecha real en al menos una fila"; exit 1
+  fi
+
+  if grep -n 'alt: ""' components/landing/carruselDatos.ts; then
+    echo "FALLA: queda al menos un alt vacío sin completar"; exit 1
+  fi
+
+  CANTIDAD_ALT_UNICOS=$(grep -o 'alt: "[^"]*"' components/landing/carruselDatos.ts | sort -u | wc -l)
+  if [ "$CANTIDAD_ALT_UNICOS" -lt 4 ]; then
+    echo "FALLA: hay menos de 4 alt distintos (algunos repetidos)"; exit 1
+  fi
+
+  echo "OK: sin placeholders, 4 alt distintos, sin AAAA-MM-DD literal"
+  ```
+
+  Esperado: `OK: sin placeholders, 4 alt distintos, sin AAAA-MM-DD
+  literal` — cualquier otra salida bloquea el commit de este paso hasta
+  corregir el archivo señalado.
 
 **Precondición verificable — criterio de bloqueo:**
 
@@ -322,17 +383,19 @@ cuando las 6 condiciones siguientes son todas verdaderas:
 3. Cada archivo es WebP o AVIF real (no un JPEG/PNG renombrado —
    confirmar con `file public/portada/carrusel-01.webp` o el inspector de
    formato del sistema operativo).
-4. `public/portada/CREDITOS.md` existe y no tiene ningún corchete `[...]`
-   sin completar.
+4. `public/portada/CREDITOS.md` existe con las 4 filas completas (origen,
+   licencia y fecha reales) — confirmado por el script del Paso 6.
 5. `components/landing/carruselDatos.ts` existe, exporta `FOTOS_CARRUSEL`
-   con exactamente 4 entradas, y ningún `alt` tiene corchetes sin
-   completar ni está vacío.
+   con exactamente 4 entradas y 4 `alt` distintos y completos — confirmado
+   por el mismo script.
 6. Visualmente, con cada imagen cargada en un visor a 375 px de ancho
    recortada a 3:4 y a 1440 px de ancho recortada a ~16:11, el sujeto
    principal de la foto no queda cortado en ninguno de los dos recortes
-   (verificación manual, sin herramienta automática).
+   (verificación manual, sin herramienta automática — el script del Paso
+   6 no cubre este punto porque es un juicio visual, no un patrón de
+   texto).
 
-- [ ] **Paso 6: Confirmar el checklist de arriba y hacer commit**
+- [ ] **Paso 7: Confirmar el checklist de arriba y hacer commit**
 
 ```bash
 git add public/portada/ components/landing/carruselDatos.ts
@@ -580,6 +643,23 @@ puede testear con Vitest en el mismo entorno `node` que ya usan
     });
   });
 
+  describe("reducirCarrusel — secuencia de interacción táctil", () => {
+    it("un swipe completo (INTERACCION_INICIO → SIGUIENTE → INTERACCION_FIN) navega sin alterar el estado persistente", () => {
+      const base: EstadoCarrusel = { indice: 0, reproduciendo: true, pausadoTemporalmente: false };
+      const alTocar = reducirCarrusel(base, { tipo: "INTERACCION_INICIO" }, 4);
+      const trasSwipe = reducirCarrusel(alTocar, { tipo: "SIGUIENTE" }, 4);
+      const alSoltar = reducirCarrusel(trasSwipe, { tipo: "INTERACCION_FIN" }, 4);
+      expect(alSoltar).toEqual({ indice: 1, reproduciendo: true, pausadoTemporalmente: false });
+    });
+
+    it("un touchcancel (sin swipe) solo termina la pausa temporal, sin navegar ni tocar el estado persistente", () => {
+      const base: EstadoCarrusel = { indice: 2, reproduciendo: false, pausadoTemporalmente: false };
+      const alTocar = reducirCarrusel(base, { tipo: "INTERACCION_INICIO" }, 4);
+      const alCancelar = reducirCarrusel(alTocar, { tipo: "INTERACCION_FIN" }, 4);
+      expect(alCancelar).toEqual(base);
+    });
+  });
+
   describe("reducirCarrusel — acción desconocida", () => {
     it("devuelve el mismo estado sin romper", () => {
       const base: EstadoCarrusel = { indice: 0, reproduciendo: true, pausadoTemporalmente: false };
@@ -711,7 +791,8 @@ puede testear con Vitest en el mismo entorno `node` que ya usan
 **Punto de detención:** esperar revisión de Codex antes de avanzar a la
 Task 3. Este módulo es la pieza central de cumplimiento de WCAG 2.2.2 —
 Codex revisa especialmente que `INTERACCION_INICIO`/`FIN` nunca toquen
-`reproduciendo` y que `TICK` sea un no-op fuera de `rotacionActiva`.
+`reproduciendo` (incluida la secuencia compuesta de touch: inicio →
+navegación → fin) y que `TICK` sea un no-op fuera de `rotacionActiva`.
 
 ---
 
@@ -724,21 +805,28 @@ Codex revisa especialmente que `INTERACCION_INICIO`/`FIN` nunca toquen
 **Interfaces:**
 - Consumes: `FOTOS_CARRUSEL`/`FotoCarrusel` de
   `@/components/landing/carruselDatos` (Task 1); `estadoInicial`,
-  `reducirCarrusel`, `rotacionActiva`, `DURACION_ROTACION_MS`,
-  `DURACION_CROSSFADE_MS`, `EstadoCarrusel`, `AccionCarrusel` de
-  `@/lib/carrusel/reproduccion` (Task 2).
+  `reducirCarrusel`, `rotacionActiva`, `siguienteIndice`,
+  `DURACION_ROTACION_MS`, `DURACION_CROSSFADE_MS`, `EstadoCarrusel`,
+  `AccionCarrusel` de `@/lib/carrusel/reproduccion` (Task 2).
 - Produces: `export default function HeroCarousel(props: {
   fotos: FotoCarrusel[] }): JSX.Element` — Task 4 (`PortadaHero`) lo
   importa y renderiza pasándole `FOTOS_CARRUSEL`.
 
 Este componente es Client Component (`"use client"`) — el único que
 agrega esta portada. No tiene lógica propia de reproducción (esa vive en
-Task 2, ya testeada); acá solo conecta esa lógica pura al DOM
-(temporizador, teclado, touch, `next/image`, fallback) y no se prueba con
-Vitest porque este repo no tiene entorno de test de componentes (sin
-jsdom/RTL — mismo criterio que ya aplica a `DishCard`, `FilterChips` o
-`GlobalSearch`, ninguno tiene test dedicado). Se verifica con
-`tsc`/`lint`/`build` y con QA manual en el navegador (Task 11).
+Task 2, ya testeada, incluida la secuencia exacta de pausa/navegación
+táctil — ver ahí "reducirCarrusel — secuencia de interacción táctil");
+acá solo conecta esa lógica pura al DOM (temporizador, teclado, touch,
+carga/precarga de `next/image`, fallback) y no se prueba con Vitest
+porque este repo no tiene entorno de test de componentes (sin jsdom/RTL —
+mismo criterio que ya aplica a `DishCard`, `FilterChips` o
+`GlobalSearch`, ninguno tiene test dedicado). Lo que sí es exclusivamente
+de este componente y por eso solo se verifica en QA manual (Task 11) es
+el cableado real de eventos del DOM: el umbral de píxeles del swipe, el
+tiempo real de carga de una imagen en una conexión lenta, y que el
+`fetchpriority` que genera `next/image` efectivamente llegue así al
+navegador. Se verifica con `tsc`/`lint`/`build` y con QA manual en el
+navegador (Task 11).
 
 - [ ] **Paso 1: Agregar los 4 íconos nuevos a `components/landing/icons.tsx`**
 
@@ -784,6 +872,7 @@ jsdom/RTL — mismo criterio que ya aplica a `DishCard`, `FilterChips` o
     estadoInicial,
     reducirCarrusel,
     rotacionActiva,
+    siguienteIndice,
   } from "@/lib/carrusel/reproduccion";
   import {
     IconFlechaDerecha,
@@ -802,8 +891,24 @@ jsdom/RTL — mismo criterio que ya aplica a `DishCard`, `FilterChips` o
       undefined,
       () => estadoInicial(fotos.length, false),
     );
-    const [montadas, setMontadas] = useState<Set<number>>(() => new Set([0]));
+
+    // `montadas`: qué imágenes tienen un <Image> en el DOM (participan
+    // de la precarga). `cargadas`/`fallidas`: qué imágenes ya
+    // terminaron de resolver, con éxito o con error. El crossfade
+    // visual espera a que el destino esté en uno de esos dos últimos
+    // sets antes de mostrarlo — ver `indiceVisible` más abajo.
+    const [montadas, setMontadas] = useState<Set<number>>(
+      () => new Set([0, siguienteIndice(0, fotos.length)]),
+    );
+    const [cargadas, setCargadas] = useState<Set<number>>(() => new Set());
     const [fallidas, setFallidas] = useState<Set<number>>(() => new Set());
+    // Índice que realmente se muestra (opacidad 1) — deliberadamente
+    // distinto de `estado.indice`. `estado.indice` es "a dónde el
+    // temporizador o el usuario quiere ir"; `indiceVisible` es "qué
+    // imagen ya está lista para mostrarse". La transición visual ocurre
+    // recién cuando ambos coinciden, así que la imagen anterior nunca
+    // se oculta antes de que la siguiente termine de cargar (o falle).
+    const [indiceVisible, setIndiceVisible] = useState(0);
     const touchStartX = useRef<number | null>(null);
 
     // Detección de prefers-reduced-motion solo al montar, en el
@@ -824,18 +929,28 @@ jsdom/RTL — mismo criterio que ya aplica a `DishCard`, `FilterChips` o
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Monta cada imagen recién la primera vez que se vuelve la
-    // imagen actual — así la 2ª a 4ª imagen no se piden al navegador
-    // hasta que el carrusel realmente llega a esa posición. Un
-    // `<Image loading="lazy">` nativo no lograría esto acá: las 4
-    // imágenes están apiladas exactamente en el mismo lugar (para el
-    // crossfade), así que el navegador las considera "en viewport"
-    // desde el primer render sin importar el atributo `loading`.
+    // Precarga como máximo una imagen por delante del ciclo — nunca las
+    // cuatro. El estado inicial ya cubre 0 (visible) + 1 (siguiente);
+    // cada vez que `estado.indice` cambia, agrega la siguiente de ESA
+    // posición, así siempre hay exactamente una imagen precargándose en
+    // segundo plano.
     useEffect(() => {
-      setMontadas((prev) =>
-        prev.has(estado.indice) ? prev : new Set(prev).add(estado.indice),
-      );
-    }, [estado.indice]);
+      const proxima = siguienteIndice(estado.indice, fotos.length);
+      setMontadas((prev) => (prev.has(proxima) ? prev : new Set(prev).add(proxima)));
+    }, [estado.indice, fotos.length]);
+
+    // El crossfade visual espera a que la imagen destino esté lista —
+    // cargada con éxito o marcada como fallida. El fallback de marca
+    // cuenta como "lista": no tiene sentido esperar algo que nunca va a
+    // terminar de cargar, así que una imagen rota pasa al fallback
+    // inmediatamente en su turno, sin intervalo vacío. Mientras el
+    // destino no esté listo, `indiceVisible` no se mueve — la imagen
+    // anterior sigue mostrándose.
+    useEffect(() => {
+      if (cargadas.has(estado.indice) || fallidas.has(estado.indice)) {
+        setIndiceVisible(estado.indice);
+      }
+    }, [estado.indice, cargadas, fallidas]);
 
     useEffect(() => {
       if (!rotacionActiva(estado)) return;
@@ -843,16 +958,34 @@ jsdom/RTL — mismo criterio que ya aplica a `DishCard`, `FilterChips` o
       return () => clearTimeout(id);
     }, [estado]);
 
+    // `touchstart` inicia la pausa temporal (igual que hover/foco).
+    // `touchend` decide primero si hubo swipe y despacha la navegación
+    // ANTES de terminar la pausa — si se despachara al revés, un swipe
+    // justo en el límite de los 6s podría perderse contra un TICK que
+    // ya estaba re-armándose. `touchcancel` (el dedo se arrastra fuera
+    // del carrusel o el gesto se interrumpe) solo termina la pausa, sin
+    // navegar. Ninguno de los tres toca `reproduciendo` — la pausa
+    // persistente del botón nunca se altera por touch (ver Task 2,
+    // "reducirCarrusel — secuencia de interacción táctil", que ya
+    // prueba esta composición exacta a nivel de reducer).
     function manejarTouchStart(e: React.TouchEvent) {
       touchStartX.current = e.touches[0]?.clientX ?? null;
+      dispatch({ tipo: "INTERACCION_INICIO" });
     }
 
     function manejarTouchEnd(e: React.TouchEvent) {
-      if (touchStartX.current === null) return;
-      const deltaX = e.changedTouches[0].clientX - touchStartX.current;
-      if (deltaX > UMBRAL_SWIPE_PX) dispatch({ tipo: "ANTERIOR" });
-      else if (deltaX < -UMBRAL_SWIPE_PX) dispatch({ tipo: "SIGUIENTE" });
+      if (touchStartX.current !== null) {
+        const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+        if (deltaX > UMBRAL_SWIPE_PX) dispatch({ tipo: "ANTERIOR" });
+        else if (deltaX < -UMBRAL_SWIPE_PX) dispatch({ tipo: "SIGUIENTE" });
+      }
       touchStartX.current = null;
+      dispatch({ tipo: "INTERACCION_FIN" });
+    }
+
+    function manejarTouchCancel() {
+      touchStartX.current = null;
+      dispatch({ tipo: "INTERACCION_FIN" });
     }
 
     return (
@@ -867,10 +1000,11 @@ jsdom/RTL — mismo criterio que ya aplica a `DishCard`, `FilterChips` o
         onBlur={() => dispatch({ tipo: "INTERACCION_FIN" })}
         onTouchStart={manejarTouchStart}
         onTouchEnd={manejarTouchEnd}
+        onTouchCancel={manejarTouchCancel}
       >
         {fotos.map((foto, i) => {
           if (!montadas.has(i)) return null;
-          const visible = i === estado.indice;
+          const visible = i === indiceVisible;
           return (
             <div
               key={foto.src}
@@ -894,6 +1028,7 @@ jsdom/RTL — mismo criterio que ya aplica a `DishCard`, `FilterChips` o
                   sizes="(min-width: 1024px) 45vw, 100vw"
                   priority={i === 0}
                   className="object-cover"
+                  onLoad={() => setCargadas((prev) => new Set(prev).add(i))}
                   onError={() => setFallidas((prev) => new Set(prev).add(i))}
                 />
               )}
@@ -929,10 +1064,10 @@ jsdom/RTL — mismo criterio que ya aplica a `DishCard`, `FilterChips` o
               key={foto.src}
               type="button"
               aria-label={`Ir a imagen ${i + 1}`}
-              aria-current={i === estado.indice ? "true" : undefined}
+              aria-current={i === indiceVisible ? "true" : undefined}
               onClick={() => dispatch({ tipo: "IR_A", indice: i })}
               className={`h-11 w-11 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
-                i === estado.indice ? "bg-white" : "bg-white/40"
+                i === indiceVisible ? "bg-white" : "bg-white/40"
               }`}
             />
           ))}
@@ -961,6 +1096,23 @@ jsdom/RTL — mismo criterio que ya aplica a `DishCard`, `FilterChips` o
 
   Notas de implementación que fijan decisiones (no quedan abiertas):
 
+  - **`priority`, no `preload`:** `next/image` en Next 16.3.1 no tiene
+    ninguna prop `preload` — `priority` (booleana) sigue siendo la API
+    vigente para marcar una imagen como prioritaria/no diferida, y es la
+    que ya usa este componente (`priority={i === 0}`). No hay ningún
+    cambio de API que hacer acá; lo que sí cambió respecto de la versión
+    anterior de esta tarea es que las imágenes 2ª a 4ª ya no esperan a
+    "volverse la actual" para empezar a pedirse — ahora se precarga
+    exactamente la siguiente del ciclo por adelantado (ver el efecto de
+    `montadas` arriba), sin marcarlas `priority`.
+  - **`indiceVisible` vs. `estado.indice`:** el indicador activo y la
+    opacidad del crossfade siguen a `indiceVisible` (lo que realmente se
+    ve), no a `estado.indice` (a dónde se está navegando). Si el
+    usuario toca un indicador cuya imagen todavía no cargó, ese
+    indicador no se resalta como activo hasta que la imagen esté lista
+    — es el mismo principio de "no ocultar lo actual hasta que lo
+    próximo esté listo" aplicado también a los indicadores, no solo al
+    crossfade.
   - Las rotaciones automáticas **no** llevan `aria-live` en ningún
     elemento — cumple la regla de la spec de no anunciar cada tick por
     región viva. No se agrega un anuncio de cambio manual tampoco: el
@@ -1381,27 +1533,146 @@ Task 7.
 ## Task 7: `DescubriHoy` — sección de platos destacados
 
 **Files:**
+- Create: `lib/viandas/destacados.ts`
+- Create: `lib/viandas/destacados.test.ts`
 - Create: `components/landing/DescubriHoy.tsx`
 
 **Interfaces:**
-- Consumes: `buscarPlatos` de `@/lib/viandas/consultas` (sin
-  modificarla); `DishCard` de `@/components/consumer/DishCard` (sin
+- Consumes: `buscarPlatos`/`ResultadoPlato` de `@/lib/viandas/consultas`
+  (sin modificarlos); `DishCard` de `@/components/consumer/DishCard` (sin
   cambios); `ResultsSkeleton` de `@/components/consumer/ResultsSkeleton`
   (sin cambios).
-- Produces: `export default function DescubriHoy(): JSX.Element` — Task 9
-  lo monta envuelto en su propio `<Suspense>`.
+- Produces: `ResultadoDestacados`, `clasificarDestacados(buscar: () =>
+  Promise<ResultadoPlato[]>, limite: number): Promise<ResultadoDestacados>`
+  de `@/lib/viandas/destacados` (consumido solo dentro de esta misma
+  tarea, por `DescubriHoy.tsx`) y `export default async function
+  DescubriHoy(): Promise<JSX.Element>` — Task 9 lo monta envuelto en su
+  propio `<Suspense>`.
 
-Server Component async, sin lógica pura nueva que testear (reutiliza
-`buscarPlatos`, ya cubierta por `lib/viandas/consultas.test.ts`) — se
-verifica con `tsc`/`lint`/`build` y QA manual de los 3 estados en
-Task 11.
+`clasificarDestacados` es la pieza pura y testeable de esta tarea:
+recibe la función de búsqueda como dependencia inyectable, así los tests
+cubren resultado/vacío/error sin tocar Supabase, sin jsdom y sin
+depender de `.env*`. `DescubriHoy.tsx` queda como una capa fina que solo
+decide qué JSX mostrar para cada uno de los tres estados que ya vienen
+clasificados — no se prueba con Vitest (mismo criterio que el resto de
+componentes de esta portada), se verifica con `tsc`/`lint`/`build` y QA
+manual en Task 11.
 
-- [ ] **Paso 1: Crear `components/landing/DescubriHoy.tsx`**
+- [ ] **Paso 1: Escribir el test que falla — `clasificarDestacados`**
+
+  Crear `lib/viandas/destacados.test.ts`:
+
+  ```ts
+  import { describe, expect, it } from "vitest";
+  import { clasificarDestacados } from "./destacados";
+  import type { ResultadoPlato } from "./consultas";
+
+  function platoFalso(id: string): ResultadoPlato {
+    return {
+      id,
+      nombre: `Plato ${id}`,
+      descripcion: null,
+      precio: 1000,
+      tipo: "almuerzo",
+      fotoUrl: null,
+      etiquetas: [],
+      viandera: {
+        nombre: "Cocina de prueba",
+        slug: "cocina-de-prueba",
+        barrio: null,
+        ofreceRetiro: true,
+        ofreceEnvio: false,
+      },
+    };
+  }
+
+  describe("clasificarDestacados", () => {
+    it("devuelve 'resultado' con los platos recortados al límite", async () => {
+      const platos = [platoFalso("1"), platoFalso("2"), platoFalso("3")];
+      const resultado = await clasificarDestacados(async () => platos, 2);
+      expect(resultado).toEqual({ estado: "resultado", platos: platos.slice(0, 2) });
+    });
+
+    it("no recorta si hay menos platos que el límite", async () => {
+      const platos = [platoFalso("1")];
+      const resultado = await clasificarDestacados(async () => platos, 8);
+      expect(resultado).toEqual({ estado: "resultado", platos });
+    });
+
+    it("devuelve 'vacio' cuando la búsqueda resuelve sin platos", async () => {
+      const resultado = await clasificarDestacados(async () => [], 8);
+      expect(resultado).toEqual({ estado: "vacio" });
+    });
+
+    it("devuelve 'error' cuando la búsqueda rechaza", async () => {
+      const resultado = await clasificarDestacados(async () => {
+        throw new Error("fallo simulado");
+      }, 8);
+      expect(resultado).toEqual({ estado: "error" });
+    });
+  });
+  ```
+
+- [ ] **Paso 2: Correr el test y confirmar que falla**
+
+  ```bash
+  npx vitest run lib/viandas/destacados.test.ts
+  ```
+
+  Esperado: falla con un error de módulo no encontrado (`Cannot find
+  module './destacados'` o equivalente) — `lib/viandas/destacados.ts`
+  todavía no existe.
+
+- [ ] **Paso 3: Implementar `clasificarDestacados`**
+
+  Crear `lib/viandas/destacados.ts`:
+
+  ```ts
+  import type { ResultadoPlato } from "./consultas";
+
+  export type ResultadoDestacados =
+    | { estado: "resultado"; platos: ResultadoPlato[] }
+    | { estado: "vacio" }
+    | { estado: "error" };
+
+  /**
+   * Clasifica el resultado de una búsqueda de platos destacados en uno
+   * de tres estados honestos — nunca confunde "sin platos cargados" con
+   * "la consulta falló". `buscar` es inyectable a propósito: en
+   * producción es `() => buscarPlatos(FILTROS_SIN_RESTRICCIONES)`, en
+   * tests es un stub que no toca Supabase.
+   */
+  export async function clasificarDestacados(
+    buscar: () => Promise<ResultadoPlato[]>,
+    limite: number,
+  ): Promise<ResultadoDestacados> {
+    let platos: ResultadoPlato[];
+    try {
+      platos = await buscar();
+    } catch {
+      return { estado: "error" };
+    }
+    const recortados = platos.slice(0, limite);
+    if (recortados.length === 0) return { estado: "vacio" };
+    return { estado: "resultado", platos: recortados };
+  }
+  ```
+
+- [ ] **Paso 4: Correr el test y confirmar que pasa**
+
+  ```bash
+  npx vitest run lib/viandas/destacados.test.ts
+  ```
+
+  Esperado: los 4 tests en verde.
+
+- [ ] **Paso 5: Crear `components/landing/DescubriHoy.tsx`**
 
   ```tsx
   import Link from "next/link";
   import DishCard from "@/components/consumer/DishCard";
   import { buscarPlatos } from "@/lib/viandas/consultas";
+  import { clasificarDestacados } from "@/lib/viandas/destacados";
 
   const CANTIDAD_DESTACADOS = 8;
   const FILTROS_SIN_RESTRICCIONES = {
@@ -1411,19 +1682,20 @@ Task 11.
     modalidad: "todas",
   } as const;
 
-  export default async function DescubriHoy() {
-    let platos;
-    try {
-      platos = (await buscarPlatos(FILTROS_SIN_RESTRICCIONES)).slice(
-        0,
-        CANTIDAD_DESTACADOS,
-      );
-    } catch {
-      // `buscarPlatos` ya logueó el error real en el servidor. Acá se
-      // atrapa a propósito (a diferencia de `/explorar`, donde el
-      // error se deja propagar a `error.tsx`) porque esta sección es
-      // una entre muchas en la portada — un fallo acá no puede tumbar
-      // el hero ni el formulario de cocinas fundadoras.
+  export default async function DescubriHoy(): Promise<JSX.Element> {
+    // `buscarPlatos` no se atrapa acá directamente — `clasificarDestacados`
+    // ya decide resultado/vacío/error de forma pura y testeada (Pasos
+    // 1-4). A diferencia de `/explorar` (donde un error se deja
+    // propagar a `error.tsx` porque la búsqueda es la página completa),
+    // acá el error se convierte en un estado más porque esta sección es
+    // una entre muchas — un fallo no puede tumbar el hero ni el
+    // formulario de cocinas fundadoras.
+    const resultado = await clasificarDestacados(
+      () => buscarPlatos(FILTROS_SIN_RESTRICCIONES),
+      CANTIDAD_DESTACADOS,
+    );
+
+    if (resultado.estado === "error") {
       return (
         <section className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
           <h2 className="font-display text-3xl font-bold text-ink">
@@ -1451,22 +1723,22 @@ Task 11.
           antes de coordinar.
         </p>
 
-        {platos.length === 0 ? (
+        {resultado.estado === "vacio" ? (
           <div className="mt-8 flex flex-col items-center gap-3 rounded-2xl border border-dashed border-line px-6 py-16 text-center">
             <p className="text-lg font-medium text-ink">
               Todavía estamos sumando las primeras cocinas de Rafaela.
             </p>
             <p className="max-w-md text-sm text-ink-muted">
               ¿Cocinás vos?{" "}
-              <a href="/#sumate" className="font-medium text-coral-600 underline-offset-2 hover:underline">
+              <Link href="/#sumate" className="font-medium text-coral-600 underline-offset-2 hover:underline">
                 Sumate más abajo
-              </a>
+              </Link>
               .
             </p>
           </div>
         ) : (
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {platos.map((plato) => (
+            {resultado.platos.map((plato) => (
               <DishCard key={plato.id} plato={plato} />
             ))}
           </div>
@@ -1476,16 +1748,13 @@ Task 11.
   }
   ```
 
-  El enlace "Sumate más abajo" usa `<a href="/#sumate">` en vez de
-  `<Link>` porque apunta a un ancla dentro de la misma página que ya
-  existe en el árbol renderizado (mismo patrón que ya usaba el `<a
-  href="#sumate">` original de la landing, salvo que acá va con `/`
-  absoluto porque `DescubriHoy` también se compone en el flujo normal
-  de `/` — un `<Link href="/#sumate">` sería igual de válido; se deja
-  `<a>` por ser la forma más simple para un ancla en la misma página sin
-  necesitar el prefetching de `next/link`.
+  `DescubriHoy` declara explícitamente `Promise<JSX.Element>` (es
+  `async`, así que ese es su tipo de retorno real — no
+  `JSX.Element` síncrono) y el enlace "Sumate más abajo" usa `<Link
+  href="/#sumate">` de `next/link`, no `<a>`, igual que el enlace a
+  `/explorar` del estado de error.
 
-- [ ] **Paso 2: Verificar tipos, lint y espacios**
+- [ ] **Paso 6: Verificar tipos, lint y espacios**
 
   ```bash
   npx tsc --noEmit
@@ -1505,17 +1774,19 @@ Task 11.
 
   Esperado: sin salida.
 
-- [ ] **Paso 3: Commit**
+- [ ] **Paso 7: Commit**
 
   ```bash
-  git add components/landing/DescubriHoy.tsx
-  git commit -m "feat: add DescubriHoy featured dishes section"
+  git add lib/viandas/destacados.ts lib/viandas/destacados.test.ts components/landing/DescubriHoy.tsx
+  git commit -m "feat: add DescubriHoy featured dishes section with a testable result classifier"
   ```
 
 **Punto de detención:** esperar revisión de Codex antes de avanzar a la
-Task 8. Codex revisa especialmente que el estado de error no presente
-`/explorar` como solución garantizada y que la aclaración de menús esté
-antes de la grilla, no después.
+Task 8. Codex revisa especialmente que `clasificarDestacados` no importe
+nada de Supabase directamente (solo recibe la función de búsqueda
+inyectada), que el estado de error no presente `/explorar` como solución
+garantizada, y que la aclaración de menús esté antes de la grilla, no
+después.
 
 ---
 
@@ -1768,8 +2039,8 @@ como quedó después de las Tasks 1 a 9.
 **Interfaces:**
 - Consumes: toda la suite existente (`lib/analitica/eventos.test.ts`,
   `lib/viandas/consultas.test.ts`, `lib/viandas/filtros.test.ts`,
-  `lib/viandera/slug.test.ts`, `lib/carrusel/reproduccion.test.ts` de la
-  Task 2).
+  `lib/viandera/slug.test.ts`) más `lib/carrusel/reproduccion.test.ts`
+  (Task 2) y `lib/viandas/destacados.test.ts` (Task 7).
 - Produces: confirmación de que ninguna tarea anterior rompió nada fuera
   de su propio alcance.
 
@@ -1889,31 +2160,92 @@ salvo que aparezca un defecto (ver Paso 8).
     desde DevTools) y confirmar que esa posición muestra el panel
     `bg-soft-teal` con `IconPlato` + "ViandApp", no un ícono roto ni un
     hueco en blanco — revertir el cambio temporal después de probarlo.
-  - Confirmar swipe en un dispositivo/emulación táctil real.
+  - Confirmar swipe en un dispositivo/emulación táctil real. Con
+    emulación táctil, confirmar además que iniciar un toque
+    (`touchstart`) pausa temporalmente la rotación, que soltar
+    (`touchend`) — con o sin swipe — la reanuda si seguía en
+    reproducción, y que cancelar el toque a mitad de gesto
+    (`touchcancel`, ej. arrastrando el dedo fuera del carrusel) también
+    la reanuda sin navegar. Confirmar que ninguno de estos tres eventos
+    cambia el texto del botón "Pausar/Reanudar presentación".
+  - **Conexión lenta:** con DevTools → Network → Throttling en "Slow 3G"
+    (o equivalente), recargar y disparar una transición (flecha o
+    automática) — confirmar que la imagen anterior permanece visible
+    hasta que la próxima termina de cargar, nunca un intervalo con hueco
+    en blanco ni un salto a una imagen a medio cargar. Con la misma
+    configuración, bloquear específicamente la request de la próxima
+    imagen desde el panel Network y confirmar que, al llegarle el turno,
+    se muestra el panel de fallback de marca inmediatamente, sin
+    intervalo vacío.
 
-- [ ] **Paso 4: `DescubriHoy` — datos reales, vacío y error**
+- [ ] **Paso 4: `DescubriHoy` — resultado, vacío y error (reproducible y
+      reversible)**
 
-  - Con los datos reales del Supabase actual, confirmar que la sección
-    muestra los platos existentes enlazando a su `/{slug}`, y que "Los
-    menús pueden cambiar — confirmá disponibilidad por WhatsApp antes de
-    coordinar." aparece inmediatamente debajo del título, antes de la
-    grilla.
-  - En un entorno de prueba (no producción), simular que `buscarPlatos`
-    devuelve `[]` (por ejemplo comentando temporalmente los datos o
-    apuntando a un proyecto de Supabase vacío) y confirmar el mensaje de
-    invitación al piloto, sin platos inventados.
-  - Simular un error de la consulta (por ejemplo, forzando
-    `NEXT_PUBLIC_SUPABASE_URL` a un valor inválido en un `.env.local` de
-    prueba, nunca en el real) y confirmar el mensaje de reintento sin
-    presentar `/explorar` como solución garantizada, visualmente
-    distinto del estado vacío. Revertir cualquier variable de entorno
-    tocada para esta prueba antes de continuar.
+  La clasificación resultado/vacío/error ya está cubierta por 4 tests en
+  `lib/viandas/destacados.test.ts` (Task 7) sin tocar Supabase, jsdom ni
+  `.env*` — acá se verifica solo la **representación visual** de cada
+  estado, con dos mecanismos reproducibles que tampoco tocan `.env.local`
+  ni datos reales:
 
-- [ ] **Paso 5: Formulario de cocinas fundadoras**
+  - **Resultado (datos reales):** con `npm run dev` corriendo contra el
+    Supabase real, confirmar que la sección muestra los platos
+    existentes enlazando a su `/{slug}`, y que "Los menús pueden
+    cambiar — confirmá disponibilidad por WhatsApp antes de coordinar."
+    aparece inmediatamente debajo del título, antes de la grilla.
+  - **Vacío:** cambiar temporalmente `CANTIDAD_DESTACADOS` a `0` en
+    `components/landing/DescubriHoy.tsx`, correr `npm run dev`, visitar
+    `/` y confirmar el mensaje de invitación al piloto sin platos
+    inventados — **revertir el cambio** (volver a `8`) antes de seguir;
+    ese `0` nunca se commitea.
+  - **Error:** en una terminal aparte, sin editar ningún archivo
+    `.env*` en disco, correr:
 
-  Enviar el formulario con datos de prueba y confirmar que sigue
-  insertando en `interesados_viandera` con los mismos tres estados
-  (`idle`/`ok`/`error`) que tenía antes de este plan.
+    ```bash
+    NEXT_PUBLIC_SUPABASE_URL="https://qa-invalida.supabase.co" npm run dev
+    ```
+
+    La variable de entorno solo existe para ese proceso puntual —
+    termina con Ctrl+C y no deja rastro en ningún archivo. Visitar `/` y
+    confirmar el mensaje de reintento sin presentar `/explorar` como
+    solución garantizada, visualmente distinto del estado vacío. Cerrar
+    ese proceso y volver a levantar `npm run dev` normal (sin el
+    prefijo) para seguir con el resto del checklist.
+
+- [ ] **Paso 5: Formulario de cocinas fundadoras — validación segura**
+
+  **No se inserta ningún lead sintético en el Supabase de producción
+  como parte de este plan.** La escritura real solo puede probarse en
+  uno de estos dos casos, ninguno obligatorio para cerrar esta tarea:
+
+  1. Contra un proyecto de Supabase local/staging autorizado para
+     pruebas, si existe uno.
+  2. Con un interesado real, enviado por el usuario al formulario en
+     producción por su propia decisión — nunca generado por quien
+     ejecuta este plan.
+
+  Sin ninguno de los dos disponibles, la verificación de regresión de
+  esta tarea se limita a:
+
+  - `npm run build` ya pasó en la Task 9 — confirma que el formulario
+    sigue compilando sin errores.
+  - Confirmar que `app/(consumer)/actions.ts` no aparece en el diff de
+    ninguna tarea de este plan: `git diff main -- "app/(consumer)/actions.ts"`
+    sin salida — la Server Action `anotarseComoInteresada` sigue
+    exactamente igual que antes de este plan.
+  - **Prueba de UI sin envío real:** con `npm run dev`, completar los
+    campos del formulario en el navegador y confirmar que la validación
+    de campos requeridos (nombre, contacto) funciona — sin tocar el
+    botón "Quiero anotarme". Confirma que el formulario renderiza y
+    valida igual que antes, sin generar ninguna fila nueva en
+    `interesados_viandera`.
+
+  **La escritura real contra producción queda marcada como validación
+  operativa que requiere autorización explícita del usuario**, igual que
+  cualquier otra escritura a la base real de este proyecto (mismo
+  criterio ya usado en el lanzamiento del explorador) — se pide aparte,
+  nunca se asume dentro de este plan. Ninguna fila real de
+  `interesados_viandera` se borra ni se altera en ninguna tarea de este
+  plan, tampoco a modo de "limpieza" de una prueba anterior.
 
 - [ ] **Paso 6: Accesibilidad — teclado, contraste, zoom**
 
@@ -1936,16 +2268,46 @@ salvo que aparezca un defecto (ver Paso 8).
   npm run start
   ```
 
-  Con el servidor de producción corriendo, correr Lighthouse en modo
-  mobile (DevTools → Lighthouse, o `npx lighthouse http://localhost:3000
-  --preset=desktop=false --view` si está disponible) contra `/`, en la
-  misma máquina y navegador que se use para comparar. Confirmar:
-  - Lighthouse Performance ≥ 90.
-  - LCP ≤ 2.5 s.
-  - En la pestaña Network de DevTools, confirmar que la primera imagen
-    del carrusel se pide con prioridad alta (`fetchpriority=high` o
-    equivalente, visible en la columna "Priority") y que la 2ª a 4ª no
-    se piden hasta que el carrusel avanza hasta ellas.
+  Con el servidor de producción corriendo en otra terminal, en la misma
+  máquina y navegador que se use para comparar antes/después:
+
+  ```bash
+  npx lighthouse http://localhost:3000 --only-categories=performance --output=json --output-path=.tmp-lighthouse-portada.json --chrome-flags="--headless"
+  ```
+
+  Este comando corre en modo mobile por defecto (el preset por defecto
+  de Lighthouse es mobile — no hace falta ningún flag de preset
+  adicional). Leer el resultado del archivo JSON generado:
+
+  ```bash
+  grep -o '"score":[0-9.]*' .tmp-lighthouse-portada.json | head -1
+  grep -o '"largest-contentful-paint":{[^}]*"numericValue":[0-9.]*' .tmp-lighthouse-portada.json
+  ```
+
+  Confirmar:
+  - Performance ≥ 90 (el `score` viene en escala 0–1 — `0.92` = 92).
+  - LCP ≤ 2500 (el `numericValue` de `largest-contentful-paint` viene en
+    milisegundos).
+
+  Borrar el archivo temporal apenas se leyeron los resultados — **nunca
+  se commitea**:
+
+  ```bash
+  rm .tmp-lighthouse-portada.json
+  git status
+  ```
+
+  Confirmar que `git status` no lo lista de ninguna forma (ni siquiera
+  como untracked) — si algo queda listado, revisar por qué antes de
+  seguir.
+
+  Adicionalmente, en la pestaña Network de DevTools, confirmar que la
+  primera imagen del carrusel se pide con prioridad alta
+  (`fetchpriority=high` o equivalente, visible en la columna "Priority")
+  y que la 2ª a 4ª no se piden hasta que el carrusel avanza hasta ellas
+  o hasta que el mecanismo de precarga-una-por-delante de Task 3 las
+  pide en segundo plano — nunca las cuatro con prioridad alta al mismo
+  tiempo.
 
   Si el presupuesto no se cumple, el defecto se corrige en la tarea de
   origen correspondiente (ej. Task 3 si el problema es el carrusel) y
@@ -1997,11 +2359,12 @@ igual que en el lanzamiento del explorador.
 | Buscador reutilizado sin cambios (4.3) | Task 4 |
 | Filtros rápidos con los 4 parámetros exactos (4.4) | Task 4 |
 | Carrusel: 3–4 fotos, crossfade 500ms, autoplay 6s (5) | Tasks 1–3 |
-| Botón persistente Pausar/Reanudar, hover/foco temporal (5, WCAG 2.2.2) | Task 2 (lógica), Task 3 (UI) |
+| Botón persistente Pausar/Reanudar, hover/foco/touch temporal (5, WCAG 2.2.2) | Task 2 (lógica, incluida la secuencia táctil), Task 3 (UI) |
 | `prefers-reduced-motion` sin autoplay inicial (5) | Task 2 (lógica), Task 3 (detección) |
 | Semántica accesible del carrusel (5) | Task 3 |
 | Imágenes locales, nunca URLs externas (5) | Task 1 |
-| Fallback de marca ante imagen rota (5) | Task 3 |
+| Imagen visible nunca se oculta antes de que la siguiente cargue; solo se precarga una por delante (5, 13) | Task 3, verificado con conexión lenta en Task 11 (Paso 3) |
+| Fallback de marca ante imagen rota, sin intervalo vacío (5) | Task 3, verificado en Task 11 (Paso 3) |
 | Franja de valor, 3 ítems aprobados (4.6) | Task 6 |
 | "Descubrí qué hay para hoy", aclaración antes de la grilla (4.7) | Task 7 |
 | Estados resultado/vacío/error diferenciados, error sin `/explorar` como garantía (7.1) | Task 7 |
@@ -2011,32 +2374,51 @@ igual que en el lanzamiento del explorador.
 | `MobileBottomNav` montado en `/` (4.11) | Task 9 |
 | Header completo desde `lg`, nombres accesibles únicos (4.1) | Task 5 |
 | `next/image`/`priority` exclusivo del carrusel, `DishCard` sin cambios (13) | Tasks 3, 7, 10 (Paso 5) |
-| Lighthouse ≥90, LCP ≤2.5s (13) | Task 11 (Paso 7) |
+| Lighthouse ≥90, LCP ≤2.5s, medición reproducible (13) | Task 11 (Paso 7, comando exacto sin `--preset`) |
 | Responsive en los 6 anchos, con/sin sesión, zoom 200% (11, 12) | Task 11 |
 | Sin analítica ni cambios de Supabase (Global Constraints) | Todas — confirmado explícitamente en Task 10 |
+| Sin lead sintético en producción; escritura real requiere autorización (Global Constraints, seguridad de datos) | Task 11 (Paso 5) |
 
-**Búsqueda de placeholders:** revisado el documento completo — no queda
-ningún `TBD`, `TODO`, "implementar después" ni instrucción sin código
-concreto. Los únicos corchetes `[...]` que quedan en el plan están
-dentro de `CREDITOS.md` y `carruselDatos.ts` en la Task 1, y son
-exactamente los datos que dependen del recurso real (fotos concretas) —
-convertidos en la precondición verificable con checklist de bloqueo de
-esa misma tarea, no en un placeholder suelto.
+**Búsqueda de placeholders (corregido tras la revisión de Codex sobre
+`9fa4aa9`):** revisado el documento completo — no queda ningún `TBD`,
+`TODO`, "implementar después" ni instrucción sin código concreto. La
+Task 1 ya no presenta el `CREDITOS.md` ni `carruselDatos.ts` como
+tablas/objetos llenados con corchetes de ejemplo — presenta el esquema
+requerido (columnas de la tabla, forma del campo `alt`) más una
+instrucción exacta de qué valor real corresponde a cada uno, y un script
+de verificación (Paso 6 de la Task 1) que falla explícitamente si
+detecta corchetes `[...]`, el string literal `AAAA-MM-DD`, un `alt`
+vacío, o menos de 4 `alt` distintos — el commit de esa tarea queda
+bloqueado hasta que ese script imprima `OK`.
 
 **Consistencia de firmas, tipos y nombres entre tareas:** `FotoCarrusel`
 (Task 1) se usa sin modificación en Task 3 (`HeroCarousel`) y Task 4
 (`PortadaHero`); `EstadoCarrusel`/`AccionCarrusel`/`reducirCarrusel`/
-`estadoInicial`/`rotacionActiva`/`DURACION_ROTACION_MS`/
-`DURACION_CROSSFADE_MS` (Task 2) se consumen sin renombrar en Task 3;
-`FOTOS_CARRUSEL` (Task 1) se importa igual en Task 4; los cuatro íconos
-nuevos de Task 3 (`IconFlechaIzquierda`, `IconFlechaDerecha`,
-`IconPausa`, `IconReproducir`) no colisionan con ningún nombre existente
-en `components/landing/icons.tsx`.
+`estadoInicial`/`rotacionActiva`/`siguienteIndice`/`DURACION_ROTACION_MS`/
+`DURACION_CROSSFADE_MS` (Task 2) se consumen sin renombrar en Task 3
+(incluido el `siguienteIndice` que la corrección de precarga agregó a lo
+que Task 3 importa); `FOTOS_CARRUSEL` (Task 1) se importa igual en
+Task 4; los cuatro íconos nuevos de Task 3 (`IconFlechaIzquierda`,
+`IconFlechaDerecha`, `IconPausa`, `IconReproducir`) no colisionan con
+ningún nombre existente en `components/landing/icons.tsx`;
+`ResultadoDestacados`/`clasificarDestacados` (Task 7) se usan sin
+renombrar dentro de la misma tarea (`destacados.ts` → `destacados.test.ts`
+→ `DescubriHoy.tsx`) y no se exportan hacia ninguna otra tarea. La firma
+de `DescubriHoy` se declara explícitamente como
+`async function DescubriHoy(): Promise<JSX.Element>` en Task 7 (antes
+decía `(): JSX.Element` en la sección de Interfaces, inconsistente con
+ser `async` — ya corregido ahí y no se repite ese error en ninguna otra
+mención del componente en este documento).
 
 **Confirmación de que ninguna tarea habilita analítica o cambios de
 base:** ninguna de las 11 tareas importa `lib/analitica/eventos.ts`, usa
 `createAdminClient()`, ni toca ningún archivo bajo `supabase/` —
 confirmado explícitamente por el checklist de grep de la Task 10, Paso 4.
+`lib/viandas/destacados.ts` (Task 7) no importa Supabase en absoluto: su
+única dependencia con el mundo real es la función `buscar` que le pasa
+`DescubriHoy.tsx`, inyectada desde afuera. Task 11, Paso 5 (corregido)
+además prohíbe explícitamente insertar un lead sintético en el Supabase
+de producción como parte de la verificación de este plan.
 
 **`git diff --check`:**
 
