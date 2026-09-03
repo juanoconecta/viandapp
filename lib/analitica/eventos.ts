@@ -22,12 +22,44 @@ const TIPOS_PLATO_VALIDOS = ["almuerzo", "cena", "ambos"] as const;
 const MODALIDADES_VALIDAS = ["retiro", "envio"] as const;
 const LARGO_MAXIMO_BUSQUEDA = 80;
 
+type ReglaIds = "ninguno" | "solo-viandera" | "solo-vianda" | "vianda-o-viandera-sola";
+
+type ReglaEvento = {
+  ids: ReglaIds;
+  metadataPermitida: readonly string[];
+};
+
 /**
- * Únicas seis claves de metadata permitidas. Cualquier clave fuera de este
- * mapa se descarta sin excepción — así se prohíben teléfono, dirección,
- * email, nombre, mensaje, identificadores de auth y cualquier equivalente,
- * sin necesidad de una lista negra.
+ * Reglas por evento, no una lista global: cada nombre define qué IDs y qué
+ * claves de metadata tienen sentido para él. "con_plato" no aparece acá
+ * porque nunca se acepta del cliente — se deriva server-side en
+ * `resolverIds` para los eventos de WhatsApp.
  */
+const REGLAS_POR_EVENTO: Record<NombreEventoAnalitica, ReglaEvento> = {
+  explore_viewed: { ids: "ninguno", metadataPermitida: ["origen"] },
+  search_submitted: {
+    ids: "ninguno",
+    metadataPermitida: ["origen", "busqueda_longitud"],
+  },
+  filter_applied: {
+    ids: "ninguno",
+    metadataPermitida: ["origen", "filtro", "tipo_plato", "modalidad"],
+  },
+  profile_viewed: { ids: "solo-viandera", metadataPermitida: ["origen"] },
+  dish_selected: {
+    ids: "solo-vianda",
+    metadataPermitida: ["origen", "tipo_plato"],
+  },
+  whatsapp_intent: {
+    ids: "vianda-o-viandera-sola",
+    metadataPermitida: ["origen"],
+  },
+  whatsapp_clicked: {
+    ids: "vianda-o-viandera-sola",
+    metadataPermitida: ["origen"],
+  },
+};
+
 const VALIDADORES_METADATA: Record<string, (valor: unknown) => boolean> = {
   origen: (v) =>
     typeof v === "string" && (ORIGENES_VALIDOS as readonly string[]).includes(v),
@@ -44,8 +76,12 @@ const VALIDADORES_METADATA: Record<string, (valor: unknown) => boolean> = {
   modalidad: (v) =>
     typeof v === "string" &&
     (MODALIDADES_VALIDAS as readonly string[]).includes(v),
-  con_plato: (v) => typeof v === "boolean",
 };
+
+const EVENTOS_WHATSAPP = new Set<NombreEventoAnalitica>([
+  "whatsapp_intent",
+  "whatsapp_clicked",
+]);
 
 export type EventoPublico = {
   nombre: NombreEventoAnalitica;
@@ -54,21 +90,53 @@ export type EventoPublico = {
   metadata?: Record<string, string | number | boolean>;
 };
 
+function esObjetoPlano(valor: unknown): valor is Record<string, unknown> {
+  return typeof valor === "object" && valor !== null && !Array.isArray(valor);
+}
+
 function esUuid(valor: unknown): valor is string {
   return typeof valor === "string" && UUID_REGEX.test(valor);
 }
 
+function resolverIds(
+  regla: ReglaIds,
+  entrada: Record<string, unknown>,
+): { vianderaId?: string; viandaId?: string } {
+  switch (regla) {
+    case "ninguno":
+      return {};
+    case "solo-viandera":
+      return esUuid(entrada.vianderaId)
+        ? { vianderaId: entrada.vianderaId }
+        : {};
+    case "solo-vianda":
+      return esUuid(entrada.viandaId) ? { viandaId: entrada.viandaId } : {};
+    case "vianda-o-viandera-sola":
+      // Nunca se confía en una pareja (vianderaId, viandaId) enviada junta:
+      // si hay un viandaId válido, se guarda solo ese — nunca el vianderaId
+      // que lo acompañe, porque podría pertenecer a otra viandera. Un
+      // vianderaId sin viandaId no tiene con qué desparejarse, así que ese
+      // caso sí se acepta solo.
+      if (esUuid(entrada.viandaId)) return { viandaId: entrada.viandaId };
+      if (esUuid(entrada.vianderaId))
+        return { vianderaId: entrada.vianderaId };
+      return {};
+  }
+}
+
 function sanitizarMetadata(
-  metadata: Record<string, string | number | boolean> | undefined,
+  metadata: unknown,
+  clavesPermitidas: readonly string[],
 ): Record<string, string | number | boolean> | undefined {
-  if (!metadata || typeof metadata !== "object") return undefined;
+  if (!esObjetoPlano(metadata)) return undefined;
 
   const limpio: Record<string, string | number | boolean> = {};
 
-  for (const [clave, validador] of Object.entries(VALIDADORES_METADATA)) {
+  for (const clave of clavesPermitidas) {
+    const validador = VALIDADORES_METADATA[clave];
     const valor = metadata[clave];
-    if (valor !== undefined && validador(valor)) {
-      limpio[clave] = valor;
+    if (validador && valor !== undefined && validador(valor)) {
+      limpio[clave] = valor as string | number | boolean;
     }
   }
 
@@ -77,26 +145,39 @@ function sanitizarMetadata(
 
 /**
  * Contrato restringido de entrada/salida — deliberadamente separado de
- * `EventoAnalitica` (la fila de la tabla): acepta ids en camelCase sin
- * validar todavía, y devuelve solo lo que ya pasó la sanitización. Nunca se
- * usa esta forma amplia como si fuera la fila real de la base.
+ * `EventoAnalitica` (la fila de la tabla): acepta cualquier valor `unknown`
+ * en el límite público y solo devuelve una forma seria (`EventoPublico`) o
+ * `null` cuando el payload no es válido. Nunca lanza para un rechazo
+ * esperable — un evento mal formado es una entrada inválida común, no una
+ * excepción.
  */
-export function sanitizarEvento(evento: EventoPublico): EventoPublico {
-  if (!(NOMBRES_VALIDOS as readonly string[]).includes(evento?.nombre ?? "")) {
-    throw new Error("Nombre de evento de analítica inválido.");
-  }
+export function sanitizarEvento(entrada: unknown): EventoPublico | null {
+  if (!esObjetoPlano(entrada)) return null;
 
-  const sanitizado: EventoPublico = { nombre: evento.nombre };
-
-  if (esUuid(evento.vianderaId)) {
-    sanitizado.vianderaId = evento.vianderaId;
+  const nombre = entrada.nombre;
+  if (!(NOMBRES_VALIDOS as readonly string[]).includes(nombre as string)) {
+    return null;
   }
-  if (esUuid(evento.viandaId)) {
-    sanitizado.viandaId = evento.viandaId;
-  }
+  const nombreValido = nombre as NombreEventoAnalitica;
 
-  const metadataLimpia = sanitizarMetadata(evento.metadata);
-  if (metadataLimpia) {
+  const regla = REGLAS_POR_EVENTO[nombreValido];
+  const ids = resolverIds(regla.ids, entrada);
+
+  const metadataLimpia = sanitizarMetadata(
+    entrada.metadata,
+    regla.metadataPermitida,
+  );
+
+  const sanitizado: EventoPublico = { nombre: nombreValido, ...ids };
+
+  if (EVENTOS_WHATSAPP.has(nombreValido)) {
+    // con_plato nunca se toma del cliente: se deriva de si terminó
+    // quedando un viandaId válido después de resolver la regla de IDs.
+    sanitizado.metadata = {
+      ...(metadataLimpia ?? {}),
+      con_plato: Boolean(ids.viandaId),
+    };
+  } else if (metadataLimpia) {
     sanitizado.metadata = metadataLimpia;
   }
 
@@ -104,8 +185,15 @@ export function sanitizarEvento(evento: EventoPublico): EventoPublico {
 }
 
 export async function registrarEvento(evento: EventoPublico): Promise<void> {
+  const seguro = sanitizarEvento(evento);
+  if (!seguro) {
+    // Un payload rechazado es una entrada inválida esperable, no una falla
+    // del servidor: se descarta en silencio, sin loguear (y nunca se loguea
+    // el payload recibido).
+    return;
+  }
+
   try {
-    const seguro = sanitizarEvento(evento);
     const admin = createAdminClient();
 
     const payload: Database["public"]["Tables"]["eventos_analitica"]["Insert"] =
@@ -119,9 +207,9 @@ export async function registrarEvento(evento: EventoPublico): Promise<void> {
     const { error } = await admin.from("eventos_analitica").insert(payload);
 
     if (error) {
-      console.error("[analitica] no se pudo registrar el evento", error);
+      console.error("[analitica] fallo al insertar evento", error);
     }
   } catch (error) {
-    console.error("[analitica] evento descartado antes de escribir", error);
+    console.error("[analitica] fallo inesperado al registrar evento", error);
   }
 }

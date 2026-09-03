@@ -318,7 +318,6 @@ git commit -m "feat: add safe explorer filters"
 **Files:**
 
 - Create: `lib/analitica/eventos.ts`
-- Create: `app/actions/analitica.ts`
 - Test: `lib/analitica/eventos.test.ts`
 
 **Interfaces:**
@@ -358,7 +357,7 @@ Run: `npm test -- lib/analitica/eventos.test.ts`
 
 `lib/analitica/eventos.ts` debe importar `server-only`. `registrarEvento` usa `createAdminClient()`, captura y registra el error en servidor sin bloquear el recorrido del usuario. Limitar metadata a seis claves conocidas y valores escalares con rangos y valores enumerados; nunca aceptar texto libre.
 
-`app/actions/analitica.ts` debe declarar `"use server"` y exponer una acción mínima que delegue en `registrarEvento`. Los componentes cliente llaman esta acción en modo best-effort; nunca importan el cliente admin.
+No crear todavía una acción pública (`"use server"`) que exponga `registrarEvento` al cliente: la interfaz no consume analítica en esta tarea, y publicar ese límite de confianza antes de necesitarlo expone un proxy anónimo sin control de costo. La acción (`app/actions/analitica.ts`) se crea recién en la Task 7, junto con una estrategia explícita de limitación de solicitudes y costo, cuando efectivamente haya un componente cliente que necesite dispararla.
 
 - [ ] **Step 4: Confirmar que pasan**
 
@@ -530,11 +529,12 @@ git commit -m "feat: launch public vianda explorer"
 - Create: `components/storefront/PublicDishCard.tsx`
 - Create: `components/storefront/WhatsAppIntent.tsx`
 - Create: `components/storefront/StickyContactBar.tsx`
+- Create: `app/actions/analitica.ts`
 
 **Interfaces:**
 
 - Consumes: `registrarEvento`, campos nuevos de `Viandera`.
-- Produces: recorrido perfil → confirmación → WhatsApp.
+- Produces: recorrido perfil → confirmación → WhatsApp; `app/actions/analitica.ts` como única acción pública que expone `registrarEvento` al cliente.
 
 - [ ] **Step 1: Extraer presentación sin cambiar la consulta todavía**
 
@@ -560,11 +560,15 @@ const mensaje = plato
 
 Codificar con `encodeURIComponent`. No incluir precio, dirección ni promesas.
 
-- [ ] **Step 5: Instrumentar la conversión**
+- [ ] **Step 5: Crear la acción pública de analítica con límite de costo**
 
-Registrar `profile_viewed`, `dish_selected`, `whatsapp_intent` y `whatsapp_clicked`. El último significa clic confirmado en “Continuar a WhatsApp”, no apertura comprobada de la app externa. La salida a WhatsApp debe funcionar aunque falle la analítica.
+Crear `app/actions/analitica.ts` (`"use server"`) recién en este punto, porque es la primera vez que un componente cliente necesita disparar analítica sin navegación. Debe exponer una acción mínima que delegue en `registrarEvento` (nunca importar `createAdminClient` directamente) y definir junto con ella una estrategia explícita de limitación de solicitudes y costo (por ejemplo, un límite de eventos por sesión/IP en una ventana de tiempo) antes de conectarla a cualquier componente cliente. `registrarEvento` ya vuelve a sanitizar internamente — la acción no debe confiar en el payload del navegador ni ampliar ese contrato.
 
-- [ ] **Step 6: Verificar estados**
+- [ ] **Step 6: Instrumentar la conversión**
+
+Registrar `profile_viewed`, `dish_selected`, `whatsapp_intent` y `whatsapp_clicked`. El último significa clic confirmado en “Continuar a WhatsApp”, no apertura comprobada de la app externa. La salida a WhatsApp debe funcionar aunque falle la analítica. `profile_viewed` puede registrarse server-side directo en el Server Component (sin pasar por la acción); `dish_selected`, `whatsapp_intent` y `whatsapp_clicked` nacen de interacciones de cliente y usan la acción del Step 5.
+
+- [ ] **Step 7: Verificar estados**
 
 - Perfil sin platos.
 - Perfil sin teléfono.
@@ -573,7 +577,7 @@ Registrar `profile_viewed`, `dish_selected`, `whatsapp_intent` y `whatsapp_click
 - Bio y nombres largos.
 - Foto ausente.
 
-- [ ] **Step 7: Validar**
+- [ ] **Step 8: Validar**
 
 Run:
 
@@ -584,10 +588,10 @@ npx tsc --noEmit
 npm run build
 ```
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add app/[slug]/page.tsx components/storefront
+git add app/[slug]/page.tsx components/storefront app/actions/analitica.ts
 git commit -m "feat: redesign storefront and track WhatsApp intent"
 ```
 

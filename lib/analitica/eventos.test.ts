@@ -22,15 +22,184 @@ const NOMBRES_VALIDOS = [
   "whatsapp_clicked",
 ] as const;
 
-describe("sanitizarEvento", () => {
+describe("sanitizarEvento — límite de entrada (unknown)", () => {
+  it("rechaza null", () => {
+    expect(sanitizarEvento(null)).toBeNull();
+  });
+
+  it("rechaza undefined", () => {
+    expect(sanitizarEvento(undefined)).toBeNull();
+  });
+
+  it("rechaza un array", () => {
+    expect(sanitizarEvento(["explore_viewed"])).toBeNull();
+  });
+
+  it("rechaza un string", () => {
+    expect(sanitizarEvento("explore_viewed")).toBeNull();
+  });
+
+  it("rechaza un número", () => {
+    expect(sanitizarEvento(42)).toBeNull();
+  });
+
+  it("rechaza un objeto sin nombre", () => {
+    expect(sanitizarEvento({})).toBeNull();
+  });
+
+  it("rechaza un nombre de evento desconocido", () => {
+    expect(sanitizarEvento({ nombre: "evento_inventado" })).toBeNull();
+  });
+
+  it("rechaza metadata anidada como objeto en vez de escalar", () => {
+    const resultado = sanitizarEvento({
+      nombre: "explore_viewed",
+      metadata: { origen: { valor: "explorar" } },
+    });
+    expect(resultado?.metadata).toBeUndefined();
+  });
+
+  it("rechaza metadata que en sí misma no es un objeto plano", () => {
+    expect(
+      sanitizarEvento({ nombre: "explore_viewed", metadata: ["origen"] })
+        ?.metadata,
+    ).toBeUndefined();
+    expect(
+      sanitizarEvento({ nombre: "explore_viewed", metadata: "origen" })
+        ?.metadata,
+    ).toBeUndefined();
+  });
+
+  it("acepta los siete nombres de evento definidos", () => {
+    for (const nombre of NOMBRES_VALIDOS) {
+      expect(sanitizarEvento({ nombre })?.nombre).toBe(nombre);
+    }
+  });
+});
+
+describe("sanitizarEvento — reglas de IDs por tipo de evento", () => {
+  it("explore_viewed no acepta vianderaId ni viandaId", () => {
+    const resultado = sanitizarEvento({
+      nombre: "explore_viewed",
+      vianderaId: UUID_VALIDO,
+      viandaId: UUID_VALIDO_2,
+    });
+    expect(resultado?.vianderaId).toBeUndefined();
+    expect(resultado?.viandaId).toBeUndefined();
+  });
+
+  it("search_submitted no acepta vianderaId ni viandaId", () => {
+    const resultado = sanitizarEvento({
+      nombre: "search_submitted",
+      vianderaId: UUID_VALIDO,
+      viandaId: UUID_VALIDO_2,
+    });
+    expect(resultado?.vianderaId).toBeUndefined();
+    expect(resultado?.viandaId).toBeUndefined();
+  });
+
+  it("filter_applied no acepta vianderaId ni viandaId", () => {
+    const resultado = sanitizarEvento({
+      nombre: "filter_applied",
+      vianderaId: UUID_VALIDO,
+      viandaId: UUID_VALIDO_2,
+    });
+    expect(resultado?.vianderaId).toBeUndefined();
+    expect(resultado?.viandaId).toBeUndefined();
+  });
+
+  it("profile_viewed acepta solamente vianderaId", () => {
+    const resultado = sanitizarEvento({
+      nombre: "profile_viewed",
+      vianderaId: UUID_VALIDO,
+      viandaId: UUID_VALIDO_2,
+    });
+    expect(resultado?.vianderaId).toBe(UUID_VALIDO);
+    expect(resultado?.viandaId).toBeUndefined();
+  });
+
+  it("profile_viewed descarta un vianderaId que no es UUID, sin lanzar error", () => {
+    expect(() =>
+      sanitizarEvento({ nombre: "profile_viewed", vianderaId: "no-es-uuid" }),
+    ).not.toThrow();
+    expect(
+      sanitizarEvento({ nombre: "profile_viewed", vianderaId: "no-es-uuid" })
+        ?.vianderaId,
+    ).toBeUndefined();
+  });
+
+  it("dish_selected acepta solamente viandaId, nunca una pareja con vianderaId", () => {
+    const resultado = sanitizarEvento({
+      nombre: "dish_selected",
+      vianderaId: UUID_VALIDO,
+      viandaId: UUID_VALIDO_2,
+    });
+    expect(resultado?.viandaId).toBe(UUID_VALIDO_2);
+    expect(resultado?.vianderaId).toBeUndefined();
+  });
+
+  it("dish_selected descarta un viandaId con intento de inyección, sin lanzar error", () => {
+    const resultado = sanitizarEvento({
+      nombre: "dish_selected",
+      viandaId: "'; drop table eventos_analitica; --",
+    });
+    expect(resultado?.viandaId).toBeUndefined();
+  });
+
+  it("whatsapp_intent con viandaId válido descarta el vianderaId enviado en pareja", () => {
+    const resultado = sanitizarEvento({
+      nombre: "whatsapp_intent",
+      vianderaId: UUID_VALIDO,
+      viandaId: UUID_VALIDO_2,
+    });
+    expect(resultado?.viandaId).toBe(UUID_VALIDO_2);
+    expect(resultado?.vianderaId).toBeUndefined();
+  });
+
+  it("whatsapp_clicked sin viandaId sí confía en un vianderaId suelto", () => {
+    const resultado = sanitizarEvento({
+      nombre: "whatsapp_clicked",
+      vianderaId: UUID_VALIDO,
+    });
+    expect(resultado?.vianderaId).toBe(UUID_VALIDO);
+    expect(resultado?.viandaId).toBeUndefined();
+  });
+
+  it("whatsapp_intent deriva con_plato=true cuando hay un viandaId válido", () => {
+    const resultado = sanitizarEvento({
+      nombre: "whatsapp_intent",
+      viandaId: UUID_VALIDO_2,
+    });
+    expect(resultado?.metadata?.con_plato).toBe(true);
+  });
+
+  it("whatsapp_clicked deriva con_plato=false cuando no hay plato, ignorando el booleano del cliente", () => {
+    const resultado = sanitizarEvento({
+      nombre: "whatsapp_clicked",
+      vianderaId: UUID_VALIDO,
+      metadata: { con_plato: true },
+    });
+    expect(resultado?.metadata?.con_plato).toBe(false);
+  });
+
+  it("whatsapp_intent ignora un con_plato=false enviado por el cliente cuando sí hay plato válido", () => {
+    const resultado = sanitizarEvento({
+      nombre: "whatsapp_intent",
+      viandaId: UUID_VALIDO_2,
+      metadata: { con_plato: false },
+    });
+    expect(resultado?.metadata?.con_plato).toBe(true);
+  });
+});
+
+describe("sanitizarEvento — metadata: claves prohibidas", () => {
   it("elimina metadata sensible y conserva las claves permitidas", () => {
     expect(
       sanitizarEvento({
         nombre: "whatsapp_intent",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        metadata: { telefono: "123", mensaje: "hola", origen: "perfil" } as any,
-      }).metadata,
-    ).toEqual({ origen: "perfil" });
+        metadata: { telefono: "123", mensaje: "hola", origen: "perfil" },
+      })?.metadata,
+    ).toEqual({ origen: "perfil", con_plato: false });
   });
 
   it.each([
@@ -48,90 +217,64 @@ describe("sanitizarEvento", () => {
       [clave]: "cualquier valor",
       origen: "explorar",
     };
+    const resultado = sanitizarEvento({ nombre: "explore_viewed", metadata });
+    expect(resultado?.metadata).toEqual({ origen: "explorar" });
+  });
+});
+
+describe("sanitizarEvento — metadata: reglas por tipo de evento", () => {
+  it("search_submitted acepta origen y busqueda_longitud", () => {
+    const resultado = sanitizarEvento({
+      nombre: "search_submitted",
+      metadata: { origen: "explorar", busqueda_longitud: 12 },
+    });
+    expect(resultado?.metadata).toEqual({
+      origen: "explorar",
+      busqueda_longitud: 12,
+    });
+  });
+
+  it("explore_viewed descarta busqueda_longitud aunque el valor sea válido", () => {
     const resultado = sanitizarEvento({
       nombre: "explore_viewed",
-      metadata,
+      metadata: { origen: "explorar", busqueda_longitud: 12 },
     });
-    expect(resultado.metadata).toEqual({ origen: "explorar" });
+    expect(resultado?.metadata).toEqual({ origen: "explorar" });
   });
 
-  it("acepta los siete nombres de evento definidos", () => {
-    for (const nombre of NOMBRES_VALIDOS) {
-      expect(sanitizarEvento({ nombre }).nombre).toBe(nombre);
-    }
-  });
-
-  it("rechaza un nombre de evento fuera de la lista", () => {
-    expect(() =>
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      sanitizarEvento({ nombre: "evento_inventado" as any }),
-    ).toThrow();
-  });
-
-  it("conserva un vianderaId con formato UUID válido", () => {
-    expect(
-      sanitizarEvento({ nombre: "profile_viewed", vianderaId: UUID_VALIDO })
-        .vianderaId,
-    ).toBe(UUID_VALIDO);
-  });
-
-  it("descarta un vianderaId que no es UUID, sin lanzar error", () => {
-    let resultado: ReturnType<typeof sanitizarEvento> | undefined;
-    expect(() => {
-      resultado = sanitizarEvento({
-        nombre: "profile_viewed",
-        vianderaId: "no-es-un-uuid",
-      });
-    }).not.toThrow();
-    expect(resultado?.vianderaId).toBeUndefined();
-  });
-
-  it("descarta un viandaId con intento de inyección, sin lanzar error", () => {
-    const resultado = sanitizarEvento({
-      nombre: "dish_selected",
-      viandaId: "'; drop table eventos_analitica; --",
-    });
-    expect(resultado.viandaId).toBeUndefined();
-  });
-
-  it("conserva un viandaId con formato UUID válido", () => {
-    expect(
-      sanitizarEvento({ nombre: "dish_selected", viandaId: UUID_VALIDO_2 })
-        .viandaId,
-    ).toBe(UUID_VALIDO_2);
-  });
-
-  it("acepta las seis claves de metadata conocidas con valores válidos", () => {
+  it("filter_applied acepta filtro, tipo_plato y modalidad", () => {
     const resultado = sanitizarEvento({
       nombre: "filter_applied",
       metadata: {
         origen: "explorar",
-        busqueda_longitud: 12,
         filtro: "modalidad",
         tipo_plato: "cena",
         modalidad: "envio",
-        con_plato: true,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
+      },
     });
-
-    expect(resultado.metadata).toEqual({
+    expect(resultado?.metadata).toEqual({
       origen: "explorar",
-      busqueda_longitud: 12,
       filtro: "modalidad",
       tipo_plato: "cena",
       modalidad: "envio",
-      con_plato: true,
     });
+  });
+
+  it("dish_selected descarta filtro y modalidad aunque el valor sea válido", () => {
+    const resultado = sanitizarEvento({
+      nombre: "dish_selected",
+      viandaId: UUID_VALIDO_2,
+      metadata: { origen: "explorar", filtro: "tipo", modalidad: "retiro" },
+    });
+    expect(resultado?.metadata).toEqual({ origen: "explorar" });
   });
 
   it("descarta una clave desconocida aunque el valor sea válido", () => {
     const resultado = sanitizarEvento({
       nombre: "explore_viewed",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      metadata: { origen: "explorar", categoria: "casera" } as any,
+      metadata: { origen: "explorar", categoria: "casera" },
     });
-    expect(resultado.metadata).toEqual({ origen: "explorar" });
+    expect(resultado?.metadata).toEqual({ origen: "explorar" });
   });
 
   it("descarta texto libre en un campo enumerado", () => {
@@ -139,7 +282,7 @@ describe("sanitizarEvento", () => {
       nombre: "explore_viewed",
       metadata: { origen: "cualquier cosa que escriba el usuario" },
     });
-    expect(resultado.metadata).toBeUndefined();
+    expect(resultado?.metadata).toBeUndefined();
   });
 
   it("descarta busqueda_longitud fuera de rango, no entera o de otro tipo", () => {
@@ -148,26 +291,15 @@ describe("sanitizarEvento", () => {
       expect(
         sanitizarEvento({
           nombre: "search_submitted",
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          metadata: { busqueda_longitud: valor } as any,
-        }).metadata,
+          metadata: { busqueda_longitud: valor },
+        })?.metadata,
       ).toBeUndefined();
     }
   });
 
-  it("descarta con_plato si no es booleano", () => {
-    expect(
-      sanitizarEvento({
-        nombre: "whatsapp_intent",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        metadata: { con_plato: "si" } as any,
-      }).metadata,
-    ).toBeUndefined();
-  });
-
   it("no incluye metadata cuando queda vacía después de sanitizar", () => {
     expect(
-      sanitizarEvento({ nombre: "explore_viewed", metadata: {} }).metadata,
+      sanitizarEvento({ nombre: "explore_viewed", metadata: {} })?.metadata,
     ).toBeUndefined();
   });
 });
@@ -184,46 +316,62 @@ describe("registrarEvento", () => {
     mockedCreateAdminClient.mockReturnValue({ from } as any);
 
     await registrarEvento({
-      nombre: "whatsapp_clicked",
+      nombre: "profile_viewed",
       vianderaId: UUID_VALIDO,
       metadata: { origen: "perfil", telefono: "no-deberia-viajar" },
     });
 
     expect(from).toHaveBeenCalledWith("eventos_analitica");
     expect(insert).toHaveBeenCalledWith({
-      nombre: "whatsapp_clicked",
+      nombre: "profile_viewed",
       viandera_id: UUID_VALIDO,
       metadata: { origen: "perfil" },
     });
   });
 
-  it("no lanza error cuando Supabase devuelve un error", async () => {
+  it("un payload rechazado no inserta ni llama a console.error", async () => {
+    const insert = vi.fn();
+    const from = vi.fn().mockReturnValue({ insert });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedCreateAdminClient.mockReturnValue({ from } as any);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await registrarEvento({ nombre: "evento_inventado" as any });
+
+    expect(insert).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it("un fallo real de Supabase se captura y se loguea sin romper el recorrido", async () => {
     const insert = vi
       .fn()
       .mockResolvedValue({ error: new Error("fallo de red") });
     const from = vi.fn().mockReturnValue({ insert });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockedCreateAdminClient.mockReturnValue({ from } as any);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
     await expect(
       registrarEvento({ nombre: "explore_viewed" }),
     ).resolves.toBeUndefined();
+
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    consoleError.mockRestore();
   });
 
-  it("no lanza error cuando el nombre del evento es inválido", async () => {
-    await expect(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      registrarEvento({ nombre: "evento_inventado" as any }),
-    ).resolves.toBeUndefined();
-  });
-
-  it("no lanza error cuando createAdminClient falla", async () => {
+  it("un fallo inesperado al crear el cliente admin se captura y se loguea", async () => {
     mockedCreateAdminClient.mockImplementation(() => {
       throw new Error("sin credenciales");
     });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
     await expect(
       registrarEvento({ nombre: "explore_viewed" }),
     ).resolves.toBeUndefined();
+
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    consoleError.mockRestore();
   });
 });
