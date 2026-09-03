@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Footer() {
   return (
     <footer className="border-t border-ink/10">
@@ -16,12 +18,12 @@ export default function Footer() {
             </a>
           </p>
         </div>
-        <a
-          href="#sumate"
+        <Link
+          href="/#sumate"
           className="py-3 font-medium text-coral transition-colors hover:text-coral-600"
         >
           ¿Hacés viandas? Sumarte →
-        </a>
+        </Link>
       </div>
     </footer>
   );

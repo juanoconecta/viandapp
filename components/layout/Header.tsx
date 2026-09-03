@@ -20,12 +20,12 @@ export default async function Header() {
         </Link>
 
         <nav className="flex items-center gap-4 sm:gap-6">
-          <a
-            href="#sumate"
+          <Link
+            href="/#sumate"
             className="hidden py-3 text-sm font-medium text-ink/70 transition-colors hover:text-ink sm:block"
           >
             Sumarte como viandera
-          </a>
+          </Link>
           {user ? (
             <Link
               href="/app"
