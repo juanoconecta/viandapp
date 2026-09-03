@@ -50,6 +50,10 @@ const config: Config = {
         paper: "#FBF2E4",
         card: "#FFFCF6",
         ink: "#362417",
+        "ink-muted": "#716255",
+        line: "#E3D6C7",
+        "soft-teal": "#EAF4F3",
+        "soft-coral": "#FCE3D9",
       },
       fontFamily: {
         display: ["var(--font-baloo)"],
