@@ -242,6 +242,24 @@ alter table viandas
   add column etiquetas text[] not null default '{}';
 ```
 
+Agregado para el explorador de consumidores (`/explorar`), en
+`supabase/migrations/202609030001_explorador_mvp.sql` — **archivo creado en
+este repo, todavía no aplicado en el Supabase de producción** (pendiente de
+ejecutarlo manualmente en el SQL Editor y confirmarlo antes de dar por
+migrado el entorno real):
+
+- `vianderas.barrio` (text, nullable), `vianderas.ofrece_retiro` (boolean,
+  default `true`), `vianderas.ofrece_envio` (boolean, default `false`),
+  `vianderas.updated_at` y `viandas.updated_at` (timestamptz, actualizados
+  automáticamente por un trigger `set_updated_at()` en cada `update`, no
+  se setean a mano desde la app).
+- Tabla `eventos_analitica` (`id`, `nombre` con `check` a los 7 eventos del
+  explorador, `viandera_id`, `vianda_id`, `metadata` jsonb, `created_at`),
+  con RLS habilitado y **sin ninguna policy** — no hay insert público. La
+  escritura solo va a poder hacerse server-side con `createAdminClient()`
+  (implementado en una tarea posterior del plan del explorador), nunca
+  desde el cliente.
+
 ## Estado del proyecto
 
 Pivot a landing page (2026-08-20): antes de tener vianderas reales, un mapa vacío
@@ -270,3 +288,17 @@ valores en `lib/viandera/etiquetas.ts`). El mockup estático "Doña Rosa" en
 la landing (`components/landing/PreviewPerfil.tsx`) sigue ahí sin cambios
 — es contenido de ejemplo para la landing, no reemplazado por esta
 funcionalidad.
+
+Explorador de consumidores en construcción (arrancado 2026-09-03, en curso):
+se está implementando `/explorar`, una vidriera pública para que un
+consumidor busque viandas por texto/tipo/etiqueta/modalidad sin
+registrarse, siguiendo
+`docs/superpowers/plans/2026-09-03-viandapp-explorador-mvp-implementation-plan.md`
+(spec en `docs/superpowers/specs/2026-09-03-explorador-consumidores-design.md`).
+`/` sigue siendo la landing de captación de vianderas — esta entrega no la
+reemplaza. Sin mapa, geolocalización, carrito ni checkout en esta primera
+vuelta (ver "Siguiente entrega" en el spec). Migración de datos versionada
+en `supabase/migrations/`, todavía sin aplicar en producción — no asumir
+que las columnas nuevas (`barrio`, `ofrece_retiro`, `ofrece_envio`,
+`updated_at`, tabla `eventos_analitica`) ya existen en el Supabase real
+hasta confirmarlo.

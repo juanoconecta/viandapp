@@ -10,7 +10,11 @@ export type Viandera = {
   activo: boolean;
   user_id: string | null;
   slug: string | null;
+  barrio: string | null;
+  ofrece_retiro: boolean;
+  ofrece_envio: boolean;
   created_at: string;
+  updated_at: string;
 };
 
 export type Vianda = {
@@ -24,6 +28,7 @@ export type Vianda = {
   disponible: boolean;
   etiquetas: string[];
   created_at: string;
+  updated_at: string;
 };
 
 export type InteresadoViandera = {
@@ -36,25 +41,49 @@ export type InteresadoViandera = {
   created_at: string;
 };
 
+export type NombreEventoAnalitica =
+  | "explore_viewed"
+  | "search_submitted"
+  | "filter_applied"
+  | "profile_viewed"
+  | "dish_selected"
+  | "whatsapp_intent"
+  | "whatsapp_clicked";
+
+export type EventoAnalitica = {
+  id: string;
+  nombre: NombreEventoAnalitica;
+  viandera_id: string | null;
+  vianda_id: string | null;
+  metadata: Record<string, string | number | boolean>;
+  created_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
       vianderas: {
         Row: Viandera;
-        Insert: Omit<Viandera, "id" | "created_at">;
-        Update: Partial<Omit<Viandera, "id" | "created_at">>;
+        Insert: Omit<Viandera, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<Viandera, "id" | "created_at" | "updated_at">>;
         Relationships: [];
       };
       viandas: {
         Row: Vianda;
-        Insert: Omit<Vianda, "id" | "created_at">;
-        Update: Partial<Omit<Vianda, "id" | "created_at">>;
+        Insert: Omit<Vianda, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<Vianda, "id" | "created_at" | "updated_at">>;
         Relationships: [];
       };
       interesados_viandera: {
         Row: InteresadoViandera;
         Insert: Omit<InteresadoViandera, "id" | "created_at">;
         Update: Partial<Omit<InteresadoViandera, "id" | "created_at">>;
+        Relationships: [];
+      };
+      eventos_analitica: {
+        Row: EventoAnalitica;
+        Insert: Omit<EventoAnalitica, "id" | "created_at">;
+        Update: Partial<Omit<EventoAnalitica, "id" | "created_at">>;
         Relationships: [];
       };
     };
