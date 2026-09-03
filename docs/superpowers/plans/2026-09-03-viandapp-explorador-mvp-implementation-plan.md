@@ -168,7 +168,7 @@ alter table public.vianderas
 alter table public.viandas
   add column if not exists updated_at timestamptz not null default now();
 
-create or replace function public.set_updated_at()
+create or replace function public.viandapp_set_updated_at()
 returns trigger language plpgsql as $$
 begin
   new.updated_at = now();
@@ -179,12 +179,12 @@ $$;
 drop trigger if exists vianderas_set_updated_at on public.vianderas;
 create trigger vianderas_set_updated_at
 before update on public.vianderas
-for each row execute function public.set_updated_at();
+for each row execute function public.viandapp_set_updated_at();
 
 drop trigger if exists viandas_set_updated_at on public.viandas;
 create trigger viandas_set_updated_at
 before update on public.viandas
-for each row execute function public.set_updated_at();
+for each row execute function public.viandapp_set_updated_at();
 
 create table if not exists public.eventos_analitica (
   id uuid primary key default gen_random_uuid(),
@@ -195,7 +195,9 @@ create table if not exists public.eventos_analitica (
   viandera_id uuid references public.vianderas(id) on delete set null,
   vianda_id uuid references public.viandas(id) on delete set null,
   metadata jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  constraint eventos_analitica_metadata_is_object
+    check (jsonb_typeof(metadata) = 'object')
 );
 
 alter table public.eventos_analitica enable row level security;
@@ -205,7 +207,7 @@ No crear políticas públicas de inserción. Los eventos se escriben únicamente
 
 - [ ] **Step 2: Actualizar tipos**
 
-Agregar los campos exactos a `Viandera`, `Vianda` y la definición de `eventos_analitica` en `Database`. Definir:
+Agregar los campos exactos a `Viandera`, `Vianda` y la definición de `eventos_analitica` en `Database`. Usar un tipo `Json` recursivo compatible con Supabase y `JsonObject` para `EventoAnalitica.metadata`. En los tipos `Insert`, mantener `updated_at` fuera de escritura; modelar como opcionales `barrio`, `ofrece_retiro`, `ofrece_envio` y, para eventos, `viandera_id`, `vianda_id`, `metadata`. Definir:
 
 ```ts
 export type NombreEventoAnalitica =
@@ -220,7 +222,7 @@ export type NombreEventoAnalitica =
 
 - [ ] **Step 3: Documentar aplicación manual**
 
-Agregar a `CLAUDE.md` la ruta de la migración, columnas y política. No afirmar que producción está migrada hasta verificarlo.
+Agregar a `CLAUDE.md` la ruta de la migración, columnas, constraint de metadata, función `viandapp_set_updated_at()` y ausencia de políticas públicas. No afirmar que producción está migrada hasta verificarlo.
 
 - [ ] **Step 4: Typecheck**
 
