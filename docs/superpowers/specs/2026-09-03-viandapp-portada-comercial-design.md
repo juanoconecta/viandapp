@@ -1,10 +1,10 @@
 # Portada comercial de ViandApp — Diseño
 
 **Fecha:** 2026-09-03
-**Estado:** Dirección visual aprobada por el usuario; especificación
-pendiente de aprobación final de Codex. Este documento es solo la
-especificación de diseño; no se implementa hasta que exista un plan
-derivado y se apruebe explícitamente.
+**Estado:** Especificación aprobada por el usuario y Codex; pendiente de
+plan de implementación. Este documento es solo la especificación de
+diseño; no se implementa hasta que exista un plan derivado y se apruebe
+explícitamente.
 **Dirección visual:** "Manifiesto local + Mercado cercano"
 **Referencia conceptual:** Gromuse, adaptada a ViandApp — inspiración de
 estructura y densidad, no una copia literal de su composición, tipografía ni
@@ -145,19 +145,21 @@ aceptación y Plan de validación. La verificación cubre explícitamente
 alterna "Ingresar"/"Mi cuenta" según ese estado), y **zoom de texto al
 200%** en esos mismos tres anchos.
 
-**Nombres accesibles distintos:** el `<nav>` del header pasa a tener
-`aria-label="Navegación principal"` (hoy no tiene ninguno) y el `<nav>` de
-`MobileBottomNav` pasa de `aria-label="Navegación principal"` (su valor
-actual, idéntico al que recibe ahora el header) a `aria-label="Navegación
-principal móvil"`. Este es el único cambio a `MobileBottomNav.tsx` en toda
-esta entrega — solo el atributo, sin tocar su lógica, sus ítems ni su
-breakpoint — pero como es un componente compartido con `/explorar`, se
-verifica que esa ruta siga funcionando igual después del cambio (ver
-Criterios de aceptación y Arquitectura, sección 10). `DesktopSidebar`
-(exclusivo de `/explorar`) sigue usando `aria-label="Navegación
-principal"` sin cambios — el landmark duplicado que eso genera junto al
-header en desktop dentro de `/explorar` queda anotado en Fuera de alcance,
-sin bloquear esta spec.
+**Nombres accesibles únicos (corregido):** el `<nav>` del header pasa a
+tener `aria-label="Navegación global"` (hoy no tiene ninguno) — no
+"Navegación principal", porque `DesktopSidebar` ya usa exactamente ese
+nombre en `/explorar` y hubiera quedado un segundo landmark de navegación
+con el mismo nombre accesible ahí. El `<nav>` de `MobileBottomNav` pasa de
+`aria-label="Navegación principal"` (su valor actual) a
+`aria-label="Navegación principal móvil"`. Este es el único cambio a
+`MobileBottomNav.tsx` en toda esta entrega — solo el atributo, sin tocar
+su lógica, sus ítems ni su breakpoint — pero como es un componente
+compartido con `/explorar`, se verifica que esa ruta siga funcionando
+igual después del cambio (ver Criterios de aceptación y Arquitectura,
+sección 10). `DesktopSidebar` (exclusivo de `/explorar`, sin cambios en
+esta entrega) conserva `aria-label="Navegación principal"` — con el
+header ahora en "Navegación global", ese nombre deja de colisionar con
+ningún otro landmark.
 
 ### 4.2 Hero (`teal`, consumidor-first)
 
@@ -668,9 +670,10 @@ Esta regla atraviesa toda la portada, no solo la sección 7:
 - **No rompe rutas existentes.** `/explorar`, `/{slug}`, `/login`,
   `/registro`, `/viandera`, `/app`, `/admin` y el formulario de
   interesados siguen funcionando igual. Los componentes compartidos que
-  esta portada modifica son `Header.tsx` (agrega dos enlaces y un
-  `aria-label` a su `<nav>`) y `MobileBottomNav.tsx` (cambia únicamente su
-  `aria-label` a "Navegación principal móvil", sin tocar su lógica, sus
+  esta portada modifica son `Header.tsx` (agrega dos enlaces y
+  `aria-label="Navegación global"` a su `<nav>`) y `MobileBottomNav.tsx`
+  (cambia únicamente su `aria-label` a "Navegación principal móvil", sin
+  tocar su lógica, sus
   ítems ni su breakpoint — ver sección 4.1); ningún otro archivo fuera de
   `app/(consumer)/page.tsx` y los componentes nuevos bajo
   `components/landing/` necesita cambios.
@@ -750,10 +753,12 @@ Cumplimiento mínimo WCAG 2.2 AA, igual que el resto del producto:
 - Landmarks: el header sigue siendo el único `<header>`, el footer el
   único `<footer>`, y `app/layout.tsx` sigue proveyendo el único
   `<main>` — igual que ya establece `ConsumerShell` para `/explorar`, esta
-  portada no anida un segundo `<main>`. El `<nav>` del header y el de
-  `MobileBottomNav` usan nombres accesibles distintos ("Navegación
-  principal" y "Navegación principal móvil" respectivamente — ver
-  sección 4.1) para no confundirse entre sí en tecnología de asistencia.
+  portada no anida un segundo `<main>`. El `<nav>` del header usa
+  `aria-label="Navegación global"` y el de `MobileBottomNav` usa
+  `aria-label="Navegación principal móvil"` (ver sección 4.1) — nombres
+  únicos entre sí y respecto de `DesktopSidebar` (`"Navegación
+  principal"`, sin cambios, exclusivo de `/explorar`), sin landmarks
+  duplicados en ninguna ruta.
 - Todo control interactivo nuevo (incluido el botón de reproducción del
   carrusel) mide al menos 44 × 44 px, igual que el resto del sitio.
 
@@ -831,8 +836,10 @@ Cumplimiento mínimo WCAG 2.2 AA, igual que el resto del producto:
   Ingresar/Mi cuenta juntos recién desde `lg` (1024 px); por debajo
   (incluido 640–1023 px) muestra solo logo + Ingresar/Mi cuenta, y no
   rompe visualmente ninguna otra ruta del sitio.
-- El `<nav>` del header y el de `MobileBottomNav` tienen `aria-label`
-  distintos ("Navegación principal" / "Navegación principal móvil").
+- El `<nav>` del header tiene `aria-label="Navegación global"` y el de
+  `MobileBottomNav` tiene `aria-label="Navegación principal móvil"` — sin
+  coincidir entre sí ni con `DesktopSidebar` ("Navegación principal",
+  sin cambios).
 - La navegación inferior mobile aparece en `/` para `< lg`, con los
   mismos tres ítems que ya usa `/explorar`.
 - Sin scroll horizontal accidental ni objetivos táctiles menores a
@@ -878,11 +885,6 @@ Cumplimiento mínimo WCAG 2.2 AA, igual que el resto del producto:
 - **Rediseño del panel `/admin` o `/viandera`** — sin cambios.
 - **A/B testing del mensaje principal** — el copy de la sección 4.2 es la
   única versión aprobada para esta entrega.
-- **Landmark duplicado entre el header y `DesktopSidebar` en
-  `/explorar`:** ambos quedan con `aria-label="Navegación principal"` en
-  desktop (esta spec distingue el header de `MobileBottomNav`, sección
-  4.1, pero no toca `DesktopSidebar`). Queda anotado como una corrección
-  de accesibilidad posterior, sin bloquear esta spec.
 
 ## Plan de validación visual y funcional
 
@@ -933,8 +935,10 @@ Antes de dar por aprobada la implementación (cuando exista):
    confirmar que el header nuevo muestra los tres enlaces intermedios
    recién desde 1024 px, que no rompe ninguna de esas páginas, que
    "Cómo funciona" resuelve a `/#como-funciona` correctamente desde una
-   ruta distinta de `/`, y que el `<nav>` del header y el de
-   `MobileBottomNav` tienen `aria-label` distintos.
+   ruta distinta de `/`, y que el `<nav>` del header tiene
+   `aria-label="Navegación global"` mientras el de `MobileBottomNav` tiene
+   `aria-label="Navegación principal móvil"` — ninguno coincide entre sí
+   ni con `DesktopSidebar` en `/explorar`.
 10. **Accesibilidad:** navegación completa por teclado del header,
     buscador, filtros rápidos, carrusel (incluido el botón de
     reproducción) y formulario; verificación de contraste AA con una
