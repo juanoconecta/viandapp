@@ -26,6 +26,31 @@ body {
   color: white;
 }
 
+/*
+ * La navegación inferior del explorador (`MobileBottomNav`) es `fixed`, así
+ * que vive fuera del flujo normal del documento. El `<main>` de
+ * `app/layout.tsx` ya reserva espacio para ella dentro de su propio
+ * contenido, pero el `Footer` global se renderiza como hermano DESPUÉS de
+ * `<main>` — sin este padding extra al final del documento, al llegar al
+ * final de una página con esa barra, el Footer (y su link "Sumarte") queda
+ * parcialmente tapado.
+ *
+ * `:has([data-consumer-bottom-nav])` solo activa este padding en páginas
+ * donde esa barra realmente existe en el DOM — nunca en `/`, `/login`, ni
+ * cualquier otra ruta sin `ConsumerShell`. Por encima de `lg` la barra se
+ * oculta con `lg:hidden` pero sigue montada en el DOM, así que el padding
+ * se anula ahí explícitamente.
+ */
+body:has([data-consumer-bottom-nav]) {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 1024px) {
+  body:has([data-consumer-bottom-nav]) {
+    padding-bottom: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

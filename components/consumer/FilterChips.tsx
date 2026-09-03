@@ -43,7 +43,6 @@ function Chip({
   return (
     <Link
       href={href}
-      aria-current={activo ? "true" : undefined}
       className={`flex min-h-[44px] shrink-0 items-center rounded-full border px-4 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal ${
         activo
           ? "border-teal-200 bg-soft-teal text-teal"

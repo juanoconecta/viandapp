@@ -17,6 +17,7 @@ export default function MobileBottomNav() {
   return (
     <nav
       aria-label="Navegación principal"
+      data-consumer-bottom-nav="true"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-card/95 backdrop-blur-sm lg:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
