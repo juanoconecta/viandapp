@@ -29,7 +29,7 @@ export default function DishCard({ plato }: { plato: ResultadoPlato }) {
           <img
             src={plato.fotoUrl}
             alt={plato.nombre}
-            className="h-full w-full object-cover transition-transform group-hover:scale-105"
+            className="h-full w-full object-cover motion-safe:transition-transform motion-safe:group-hover:scale-105"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-sm text-ink-muted">

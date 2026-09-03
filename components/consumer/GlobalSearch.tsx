@@ -27,14 +27,21 @@ export default function GlobalSearch({
     >
       <IconBuscar className="h-5 w-5 shrink-0 text-ink-muted" />
       <label htmlFor="explorador-busqueda" className="sr-only">
-        Buscar plato, viandera, etiqueta o barrio
+        Buscar por nombre del plato
       </label>
+      {/*
+        Búsqueda ampliada (viandera, etiqueta, barrio) queda como mejora
+        posterior — `buscarPlatos` en lib/viandas/consultas.ts hoy solo
+        hace ILIKE contra el nombre del plato. El label/placeholder no
+        deben prometer más de lo que la consulta resuelve; las etiquetas
+        siguen filtrándose mediante FilterChips, no por acá.
+      */}
       <input
         id="explorador-busqueda"
         name="q"
         type="search"
         defaultValue={initialQuery}
-        placeholder="Buscar plato, viandera, etiqueta o barrio"
+        placeholder="Buscar por nombre del plato"
         maxLength={LARGO_MAXIMO_BUSQUEDA}
         className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-ink-muted focus:outline-none"
       />

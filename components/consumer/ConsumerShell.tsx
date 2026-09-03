@@ -9,14 +9,18 @@ import MobileBottomNav from "./MobileBottomNav";
  * esto desde `app/layout.tsx`, igual que ya pasa en `/app` y `/viandera`.
  * Solo agrega la navegación propia de esta sección: sidebar en desktop,
  * navegación inferior en mobile/tablet.
+ *
+ * El `<main>` del documento ya lo pone `app/layout.tsx` alrededor de
+ * `{children}` — este contenedor es un `<div>`, no otro `<main>`, para no
+ * anidar dos landmarks "main" (HTML solo permite uno).
  */
 export default function ConsumerShell({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto flex w-full max-w-[1440px]">
       <DesktopSidebar />
-      <main className="min-w-0 flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-10">
+      <div className="min-w-0 flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-10">
         {children}
-      </main>
+      </div>
       <MobileBottomNav />
     </div>
   );

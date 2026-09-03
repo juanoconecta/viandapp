@@ -11,11 +11,11 @@ export default function ResultsSkeleton() {
           key={i}
           className="flex flex-col overflow-hidden rounded-2xl border border-line bg-card"
         >
-          <div className="aspect-[4/3] w-full animate-pulse bg-line/50" />
+          <div className="aspect-[4/3] w-full motion-safe:animate-pulse bg-line/50" />
           <div className="flex flex-col gap-2 p-3">
-            <div className="h-4 w-3/4 animate-pulse rounded bg-line/60" />
-            <div className="h-3 w-1/2 animate-pulse rounded bg-line/50" />
-            <div className="h-3 w-2/3 animate-pulse rounded bg-line/40" />
+            <div className="h-4 w-3/4 motion-safe:animate-pulse rounded bg-line/60" />
+            <div className="h-3 w-1/2 motion-safe:animate-pulse rounded bg-line/50" />
+            <div className="h-3 w-2/3 motion-safe:animate-pulse rounded bg-line/40" />
           </div>
         </div>
       ))}

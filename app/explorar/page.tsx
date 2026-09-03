@@ -63,10 +63,21 @@ export default async function ExplorarPage({
 }
 
 async function Resultados({ filtros }: { filtros: FiltrosExplorador }) {
+  // `buscarPlatos` lanza ante un error real de consulta — no lo atrapamos
+  // acá a propósito, así llega a `app/explorar/error.tsx`. Solo se llega
+  // más abajo cuando la consulta resolvió bien.
   const platos = await buscarPlatos(filtros);
 
   if (platos.length === 0) {
     return <EmptyState filtros={filtros} />;
+  }
+
+  if (platos.length === 1) {
+    return (
+      <div className="mx-auto max-w-sm">
+        <DishCard plato={platos[0]} />
+      </div>
+    );
   }
 
   return (
