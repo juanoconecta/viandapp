@@ -652,9 +652,13 @@ from information_schema.columns
 where table_schema = 'public' and table_name = 'eventos_analitica'
 order by ordinal_position;
 
-select conname, pg_get_constraintdef(oid)
-from pg_constraint
-where conrelid = 'public.eventos_analitica'::regclass;
+-- `to_regclass(...)` devuelve NULL si la tabla todavía no existe, en vez
+-- de lanzar error como `::regclass` — importante acá porque
+-- `eventos_analitica` no existir todavía es precisamente el estado
+-- esperado antes de la primera corrida de esta migración.
+select conname, pg_get_constraintdef(c.oid)
+from pg_constraint c
+where c.conrelid = to_regclass('public.eventos_analitica');
 
 -- 3. Existencia previa de la función y los triggers involucrados
 select proname from pg_proc where proname = 'viandapp_set_updated_at';
@@ -663,6 +667,15 @@ select tgname, tgrelid::regclass as tabla
 from pg_trigger
 where tgname in ('vianderas_set_updated_at', 'viandas_set_updated_at')
   and not tgisinternal;
+
+-- 4. Conteos "antes" — guardar estos tres números para comparar contra
+-- los mismos conteos en el Step 3 (Verificación posterior). Esta
+-- migración no inserta ni borra ninguna fila de estas tablas, solo agrega
+-- columnas — los tres números deben quedar idénticos después de aplicarla.
+select
+  (select count(*) from public.vianderas) as vianderas,
+  (select count(*) from public.viandas) as viandas,
+  (select count(*) from public.interesados_viandera) as interesados;
 ```
 
 Si cualquiera de estas consultas muestra algo inesperado (una columna con
@@ -685,19 +698,76 @@ fecha y resultado.
 - [ ] **Step 3: Verificación posterior**
 
 ```sql
-select column_name from information_schema.columns
-where table_name = 'vianderas' and column_name in ('barrio','ofrece_retiro','ofrece_envio','updated_at');
--- esperado: 4 filas
+-- 1. Las cuatro columnas nuevas de vianderas: tipo, nullability y default
+select column_name, data_type, is_nullable, column_default
+from information_schema.columns
+where table_schema = 'public' and table_name = 'vianderas'
+  and column_name in ('barrio', 'ofrece_retiro', 'ofrece_envio', 'updated_at')
+order by column_name;
+-- esperado: 4 filas —
+--   barrio        | text        | YES | (sin default)
+--   ofrece_retiro | boolean     | NO  | true
+--   ofrece_envio  | boolean     | NO  | false
+--   updated_at    | timestamptz | NO  | now()
 
-select column_name from information_schema.columns
-where table_name = 'viandas' and column_name = 'updated_at';
--- esperado: 1 fila
+-- 2. updated_at en viandas
+select column_name, data_type, is_nullable, column_default
+from information_schema.columns
+where table_schema = 'public' and table_name = 'viandas' and column_name = 'updated_at';
+-- esperado: 1 fila — timestamptz, NO, now()
 
-select tablename from pg_tables where tablename = 'eventos_analitica';
--- esperado: 1 fila
+-- 3. Existencia y definición de la función
+select proname, pg_get_functiondef(oid) as definicion
+from pg_proc
+where proname = 'viandapp_set_updated_at';
+-- esperado: 1 fila; el cuerpo debe hacer `new.updated_at = now(); return new;`
 
+-- 4. Ambos triggers, habilitados y apuntando a las tablas correctas
+select tgname, tgrelid::regclass as tabla, tgenabled
+from pg_trigger
+where tgname in ('vianderas_set_updated_at', 'viandas_set_updated_at')
+  and not tgisinternal;
+-- esperado: 2 filas — vianderas_set_updated_at -> vianderas,
+-- viandas_set_updated_at -> viandas, ambos con tgenabled = 'O' (origin, activo)
+
+-- 5. Estructura completa de eventos_analitica
+select column_name, data_type, is_nullable, column_default
+from information_schema.columns
+where table_schema = 'public' and table_name = 'eventos_analitica'
+order by ordinal_position;
+-- esperado: id, nombre, viandera_id, vianda_id, metadata, created_at
+
+select conname, pg_get_constraintdef(c.oid)
+from pg_constraint c
+where c.conrelid = to_regclass('public.eventos_analitica');
+-- esperado: primary key en id, el check de `nombre`, el check
+-- eventos_analitica_metadata_is_object, y las dos foreign keys hacia
+-- vianderas/viandas
+
+-- 6. RLS efectivamente habilitado (no solo "debería estar")
+select relrowsecurity
+from pg_class
+where oid = to_regclass('public.eventos_analitica');
+-- esperado: true
+
+-- 7. Cero políticas públicas
 select count(*) from pg_policies where tablename = 'eventos_analitica';
--- esperado: 0 (sin políticas públicas, a propósito)
+-- esperado: 0 (a propósito — sin insert público)
+
+-- 8. Las filas ya existentes de vianderas recibieron los defaults esperados
+select id, nombre, ofrece_retiro, ofrece_envio, updated_at, barrio
+from public.vianderas;
+-- esperado: ofrece_retiro = true y ofrece_envio = false en TODAS las filas
+-- que ya existían antes de migrar; updated_at no nulo en todas; barrio
+-- nulo es válido (columna nueva, sin dato previo que migrar)
+
+-- 9. La cantidad de filas no cambió
+select
+  (select count(*) from public.vianderas) as vianderas,
+  (select count(*) from public.viandas) as viandas,
+  (select count(*) from public.interesados_viandera) as interesados;
+-- comparar contra los tres números guardados en el Step 1 (punto 4 del
+-- preflight) — deben ser idénticos
 ```
 
 - [ ] **Step 4: Completar datos reales mínimos**
