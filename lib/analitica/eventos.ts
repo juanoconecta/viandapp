@@ -22,7 +22,11 @@ const TIPOS_PLATO_VALIDOS = ["almuerzo", "cena", "ambos"] as const;
 const MODALIDADES_VALIDAS = ["retiro", "envio"] as const;
 const LARGO_MAXIMO_BUSQUEDA = 80;
 
-type ReglaIds = "ninguno" | "solo-viandera" | "solo-vianda" | "vianda-o-viandera-sola";
+type ReglaIds =
+  | "ninguno"
+  | "requiere-viandera"
+  | "requiere-vianda"
+  | "requiere-vianda-o-viandera";
 
 type ReglaEvento = {
   ids: ReglaIds;
@@ -33,7 +37,10 @@ type ReglaEvento = {
  * Reglas por evento, no una lista global: cada nombre define qué IDs y qué
  * claves de metadata tienen sentido para él. "con_plato" no aparece acá
  * porque nunca se acepta del cliente — se deriva server-side en
- * `resolverIds` para los eventos de WhatsApp.
+ * `resolverIds` para los eventos de WhatsApp. Los eventos con una regla
+ * "requiere-*" se rechazan por completo (devuelven `null`) si el ID no
+ * aparece o no tiene forma de UUID — no es opcional, es un requisito de la
+ * fila.
  */
 const REGLAS_POR_EVENTO: Record<NombreEventoAnalitica, ReglaEvento> = {
   explore_viewed: { ids: "ninguno", metadataPermitida: ["origen"] },
@@ -45,17 +52,20 @@ const REGLAS_POR_EVENTO: Record<NombreEventoAnalitica, ReglaEvento> = {
     ids: "ninguno",
     metadataPermitida: ["origen", "filtro", "tipo_plato", "modalidad"],
   },
-  profile_viewed: { ids: "solo-viandera", metadataPermitida: ["origen"] },
+  profile_viewed: {
+    ids: "requiere-viandera",
+    metadataPermitida: ["origen"],
+  },
   dish_selected: {
-    ids: "solo-vianda",
+    ids: "requiere-vianda",
     metadataPermitida: ["origen", "tipo_plato"],
   },
   whatsapp_intent: {
-    ids: "vianda-o-viandera-sola",
+    ids: "requiere-vianda-o-viandera",
     metadataPermitida: ["origen"],
   },
   whatsapp_clicked: {
-    ids: "vianda-o-viandera-sola",
+    ids: "requiere-vianda-o-viandera",
     metadataPermitida: ["origen"],
   },
 };
@@ -91,36 +101,48 @@ export type EventoPublico = {
 };
 
 function esObjetoPlano(valor: unknown): valor is Record<string, unknown> {
-  return typeof valor === "object" && valor !== null && !Array.isArray(valor);
+  if (typeof valor !== "object" || valor === null || Array.isArray(valor)) {
+    return false;
+  }
+  // Solo un literal `{}` o `Object.create(null)` — nunca Date, Map, u otra
+  // instancia de clase, aunque `typeof` los reporte como "object".
+  const prototipo = Object.getPrototypeOf(valor);
+  return prototipo === Object.prototype || prototipo === null;
 }
 
 function esUuid(valor: unknown): valor is string {
   return typeof valor === "string" && UUID_REGEX.test(valor);
 }
 
+/**
+ * `null` significa "rechazar todo el evento": el ID que la regla exige no
+ * llegó, o no tiene forma de UUID. `{}` solo puede pasar para la regla
+ * "ninguno", que no exige nada.
+ */
 function resolverIds(
   regla: ReglaIds,
   entrada: Record<string, unknown>,
-): { vianderaId?: string; viandaId?: string } {
+): { vianderaId?: string; viandaId?: string } | null {
   switch (regla) {
     case "ninguno":
       return {};
-    case "solo-viandera":
+    case "requiere-viandera":
       return esUuid(entrada.vianderaId)
         ? { vianderaId: entrada.vianderaId }
-        : {};
-    case "solo-vianda":
-      return esUuid(entrada.viandaId) ? { viandaId: entrada.viandaId } : {};
-    case "vianda-o-viandera-sola":
+        : null;
+    case "requiere-vianda":
+      return esUuid(entrada.viandaId) ? { viandaId: entrada.viandaId } : null;
+    case "requiere-vianda-o-viandera":
       // Nunca se confía en una pareja (vianderaId, viandaId) enviada junta:
       // si hay un viandaId válido, se guarda solo ese — nunca el vianderaId
       // que lo acompañe, porque podría pertenecer a otra viandera. Un
       // vianderaId sin viandaId no tiene con qué desparejarse, así que ese
-      // caso sí se acepta solo.
+      // caso sí se acepta solo. Sin ninguno de los dos, se rechaza: el
+      // evento exige poder atribuirse a algo.
       if (esUuid(entrada.viandaId)) return { viandaId: entrada.viandaId };
       if (esUuid(entrada.vianderaId))
         return { vianderaId: entrada.vianderaId };
-      return {};
+      return null;
   }
 }
 
@@ -162,6 +184,7 @@ export function sanitizarEvento(entrada: unknown): EventoPublico | null {
 
   const regla = REGLAS_POR_EVENTO[nombreValido];
   const ids = resolverIds(regla.ids, entrada);
+  if (ids === null) return null;
 
   const metadataLimpia = sanitizarMetadata(
     entrada.metadata,
@@ -184,8 +207,13 @@ export function sanitizarEvento(entrada: unknown): EventoPublico | null {
   return sanitizado;
 }
 
-export async function registrarEvento(evento: EventoPublico): Promise<void> {
-  const seguro = sanitizarEvento(evento);
+/**
+ * `entrada` es `unknown` a propósito: esta es la única puerta de entrada a
+ * la escritura, y no debe existir ningún camino que llegue a `insert` sin
+ * pasar por `sanitizarEvento` primero.
+ */
+export async function registrarEvento(entrada: unknown): Promise<void> {
+  const seguro = sanitizarEvento(entrada);
   if (!seguro) {
     // Un payload rechazado es una entrada inválida esperable, no una falla
     // del servidor: se descarta en silencio, sin loguear (y nunca se loguea
