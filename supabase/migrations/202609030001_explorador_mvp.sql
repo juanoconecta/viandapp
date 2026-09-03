@@ -1,3 +1,28 @@
+-- Explorador de consumidores — columnas nuevas en vianderas/viandas,
+-- función y triggers de updated_at, tabla eventos_analitica.
+--
+-- Repetible sobre el esquema que este archivo espera (columnas/tabla ya
+-- creadas por una corrida anterior de este mismo script): usa
+-- `if not exists` / `create or replace` / `drop trigger if exists` +
+-- `create trigger`. Eso NO reconcilia un objeto preexistente con un tipo,
+-- default o constraint distinto al de acá abajo — si `vianderas.barrio`
+-- ya existiera con otro tipo, por ejemplo, este script no lo corrige. Ver
+-- las consultas de preflight en el plan (Task 8) antes de aplicar.
+--
+-- Reemplaza (no elimina) los dos triggers `vianderas_set_updated_at` y
+-- `viandas_set_updated_at` vía `drop trigger if exists` + `create
+-- trigger` — es la forma estándar de "crear o reemplazar" un trigger en
+-- Postgres, que no tiene `create or replace trigger`. Ningún `drop` de
+-- tabla, columna o fila en todo el script.
+--
+-- Todas las sentencias de acá abajo son DDL transaccional válido en
+-- Postgres (ninguna es CREATE INDEX CONCURRENTLY, VACUUM, ni un ALTER
+-- TYPE ... ADD VALUE que necesite su propia transacción), así que todo el
+-- script corre atómico: si algo falla a mitad de camino, el ROLLBACK
+-- implícito de la sesión deshace todo, no deja el esquema a medio migrar.
+
+begin;
+
 alter table public.vianderas
   add column if not exists barrio text,
   add column if not exists ofrece_retiro boolean not null default true,
@@ -39,3 +64,5 @@ create table if not exists public.eventos_analitica (
 );
 
 alter table public.eventos_analitica enable row level security;
+
+commit;

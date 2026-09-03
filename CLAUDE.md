@@ -310,7 +310,13 @@ hay ninguna escritura activa en `eventos_analitica` hoy.
 Migración de datos versionada en `supabase/migrations/`, todavía sin
 aplicar en producción — no asumir que las columnas nuevas (`barrio`,
 `ofrece_retiro`, `ofrece_envio`, `updated_at`, tabla `eventos_analitica`)
-ya existen en el Supabase real hasta confirmarlo. Es aditiva e idempotente
-(sin drops, con `if not exists` / `create or replace` en todo lo que
-corresponde) — segura de aplicar sin backup especial más allá de los
-backups automáticos que ya mantiene Supabase.
+ya existen en el Supabase real hasta confirmarlo. Es aditiva (sin `drop`
+de tablas ni columnas) y repetible sobre el esquema que espera — usa
+`if not exists` / `create or replace` / `drop trigger if exists` +
+`create trigger` — pero eso **no** es lo mismo que "segura de aplicar sin
+verificar backup": los backups diarios automáticos de Supabase dependen
+del plan (no existen en el plan Free), así que antes de aplicarla hay que
+confirmar a mano en el Dashboard qué plan tiene el proyecto y que exista
+un backup restaurable; si no lo hay, hacer un dump lógico manual antes de
+tocar nada. Detalle completo del procedimiento (preflight, transacción,
+checklist de salida y rollback) en la Task 8 del plan del explorador.

@@ -615,15 +615,96 @@ con un teléfono compuesto solo por símbolos).
 sin analítica — la analítica es la Task 9, entrega posterior pausada a
 pedido explícito, y no bloquea este lanzamiento.
 
-- [ ] **Step 1: Aplicar la migración en el entorno acordado**
+Checklist completo de salida, en este orden — cada paso condicionado a que
+el anterior haya salido bien:
 
-No ejecutar en producción sin confirmación explícita. Registrar fecha y resultado.
+- [ ] **Step 1: Preflight y respaldo**
 
-- [ ] **Step 2: Completar datos reales mínimos**
+**Respaldo — verificar antes de tocar nada:**
+
+1. Confirmar en el Dashboard de Supabase (Settings → Billing) qué plan tiene el proyecto real. Los backups diarios automáticos con restauración de un clic **no existen en el plan Free** — son una función de los planes pagos (Pro en adelante). No asumir que existen sin mirarlo.
+2. Si el proyecto es Free, o si es un plan superior pero Database → Backups no muestra un backup reciente y restaurable, generar un respaldo lógico manual antes de seguir:
+
+   ```bash
+   supabase db dump --db-url "<connection string>" -f respaldo-pre-explorador-mvp.sql
+   # equivalente directo:
+   pg_dump "<connection string>" -f respaldo-pre-explorador-mvp.sql
+   ```
+
+   Verificar que el archivo generado no esté vacío y contenga al menos las tablas `vianderas`, `viandas` e `interesados_viandera` antes de considerarlo un respaldo válido.
+3. **No pasar al Step 2 hasta confirmar que existe un respaldo restaurable** — el automático de Supabase en un plan que lo incluye, o el dump manual del punto 2.
+
+**Preflight de esquema — preparado acá, no ejecutar todavía. Correr en el SQL Editor recién en el momento de aplicar la migración, antes de correr el script:**
+
+```sql
+-- 1. Forma actual de vianderas y viandas
+select table_name, column_name, data_type, is_nullable, column_default
+from information_schema.columns
+where table_schema = 'public' and table_name in ('vianderas', 'viandas')
+order by table_name, ordinal_position;
+
+-- 2. eventos_analitica: no debe existir todavía, o si existe, su
+-- estructura debe coincidir exacto con la migración — si esta consulta
+-- devuelve filas, compararlas a mano contra
+-- supabase/migrations/202609030001_explorador_mvp.sql antes de seguir.
+select column_name, data_type, is_nullable, column_default
+from information_schema.columns
+where table_schema = 'public' and table_name = 'eventos_analitica'
+order by ordinal_position;
+
+select conname, pg_get_constraintdef(oid)
+from pg_constraint
+where conrelid = 'public.eventos_analitica'::regclass;
+
+-- 3. Existencia previa de la función y los triggers involucrados
+select proname from pg_proc where proname = 'viandapp_set_updated_at';
+
+select tgname, tgrelid::regclass as tabla
+from pg_trigger
+where tgname in ('vianderas_set_updated_at', 'viandas_set_updated_at')
+  and not tgisinternal;
+```
+
+Si cualquiera de estas consultas muestra algo inesperado (una columna con
+otro tipo, una tabla `eventos_analitica` con una forma distinta, un
+trigger con otro nombre apuntando a las mismas tablas), **no aplicar la
+migración tal cual** — resolver la discrepancia primero. `if not exists` /
+`create or replace` no reconcilian un objeto preexistente con una
+definición distinta a la del script; solo evitan el error de "ya existe"
+cuando el objeto YA coincide.
+
+- [ ] **Step 2: Aplicar la migración**
+
+Pegar el contenido completo de
+`supabase/migrations/202609030001_explorador_mvp.sql` (envuelto en
+`begin`/`commit` — todas sus sentencias son DDL transaccional válido en
+Postgres, así que corre atómico) en el SQL Editor del proyecto real y
+ejecutar. No ejecutar en producción sin confirmación explícita. Registrar
+fecha y resultado.
+
+- [ ] **Step 3: Verificación posterior**
+
+```sql
+select column_name from information_schema.columns
+where table_name = 'vianderas' and column_name in ('barrio','ofrece_retiro','ofrece_envio','updated_at');
+-- esperado: 4 filas
+
+select column_name from information_schema.columns
+where table_name = 'viandas' and column_name = 'updated_at';
+-- esperado: 1 fila
+
+select tablename from pg_tables where tablename = 'eventos_analitica';
+-- esperado: 1 fila
+
+select count(*) from pg_policies where tablename = 'eventos_analitica';
+-- esperado: 0 (sin políticas públicas, a propósito)
+```
+
+- [ ] **Step 4: Completar datos reales mínimos**
 
 Antes de publicar, exigir por viandera: slug, nombre, barrio, teléfono, modalidad y al menos un plato disponible con precio o indicación clara de consulta.
 
-- [ ] **Step 3: Verificación funcional**
+- [ ] **Step 5: Verificación funcional**
 
 Probar:
 
@@ -636,21 +717,21 @@ Probar:
 /{slug-real}
 ```
 
-- [ ] **Step 4: Verificación responsive**
+- [ ] **Step 6: Verificación responsive**
 
 Revisar 320, 375, 768, 1024 y 1440 px; orientación vertical/horizontal; teclado; zoom de texto 200%.
 
-- [ ] **Step 5: Verificación analítica — N/A para este lanzamiento**
+- [ ] **Step 7: Verificación analítica — N/A para este lanzamiento**
 
 La analítica no se conecta en esta entrega (ver Task 9). Este step se
 retoma dentro de la propia Task 9 cuando esa entrega se ejecute — no
 bloquea el lanzamiento actual.
 
-- [ ] **Step 6: Lighthouse y accesibilidad**
+- [ ] **Step 8: Lighthouse y accesibilidad**
 
 Objetivos orientativos: Accessibility ≥95, Best Practices ≥95, Performance ≥85 en mobile. Corregir problemas funcionales; documentar variaciones atribuibles a red o imágenes remotas.
 
-- [ ] **Step 7: Revisión de diff y commit final**
+- [ ] **Step 9: Revisión de diff y commit final del código**
 
 ```bash
 git status --short
@@ -662,6 +743,55 @@ npm run build
 ```
 
 Si la verificación no exigió cambios, no crear un commit vacío. Si hubo correcciones, revisar `git diff --name-only`, agregar únicamente esos archivos por nombre explícito y crear `fix: complete explorer launch verification`.
+
+- [ ] **Step 10: Push de la rama**
+
+```bash
+git push -u origin feat/explorador-mvp-task1
+```
+
+- [ ] **Step 11: PR o integración a `main`**
+
+Abrir PR (o merge fast-forward, según lo que se prefiera) recién después
+de la aprobación final explícita — no mezclar la rama sin ese visto
+bueno.
+
+- [ ] **Step 12: Preview de Vercel, cuando corresponda**
+
+**No asumir que existe integración GitHub↔Vercel con previews por PR, ni
+que `main` dispara un deploy automático** — confirmarlo primero en el
+Dashboard de Vercel (Project → Settings → Git): qué rama está configurada
+como production branch, y si "Automatically deploy" está activo para esa
+rama. Si hay previews por PR configurados, revisar el preview deploy del
+PR antes de mergear.
+
+- [ ] **Step 13: Deploy de producción**
+
+Una vez mergeado a la rama de producción confirmada en el Step 12, seguir
+el deploy en el Dashboard de Vercel hasta que termine (o disparar el
+deploy manualmente si no hay auto-deploy configurado).
+
+- [ ] **Step 14: Smoke test en producción**
+
+Probar en el dominio real: `/`, `/explorar`, `/{slug-real}` — confirmar
+que cargan sin error, que `/explorar` muestra resultados reales (no el
+estado de error ni el vacío por falta de migración), y que el perfil real
+permite abrir el diálogo de WhatsApp.
+
+- [ ] **Step 15: Criterio de rollback**
+
+**Rollback de aplicación:** revertir el deploy desde el Dashboard de
+Vercel al deployment anterior conocido-bueno — no requiere revertir git
+ni tocar la base.
+
+**Rollback de base de datos:** esta migración es aditiva — no elimina
+columnas, tablas ni filas existentes, así que un rollback de aplicación
+(punto anterior) es seguro sin tocar la base, incluso con la migración ya
+aplicada (el código anterior simplemente no lee las columnas nuevas). Un
+script de reversa automático (`drop column`, etc.) **no está preparado en
+este plan** porque no debería hacer falta para este caso aditivo — si
+llegara a haber pérdida o corrupción real de datos, el camino es
+restaurar desde el respaldo del Step 1, no un `.down.sql`.
 
 ---
 
