@@ -336,3 +336,17 @@ distinto de `MobileBottomNav` (`"Navegación global"` vs "Navegación
 principal móvil"). Sin mapa, analítica conectada ni cambios de
 Supabase en esta entrega — ver
 `docs/superpowers/specs/2026-09-03-viandapp-portada-comercial-design.md`.
+
+Optimización de LCP y carga de fuentes de la portada (2026-09-03/04):
+`HeroCarousel.tsx` sirve la foto 0 (candidata a LCP) vía un `<picture>`
+con variantes mobile/desktop dedicadas (`public/portada/carrusel-01-
+{mobile,desktop}.{avif,webp}`) en vez de `next/image`, y la foto
+siguiente del carrusel recién se precarga después de que la visible
+termine de cargar (antes competían por ancho de banda). `Inter` en
+`app/layout.tsx` usa `preload: false` + `display: "swap"`, y `Baloo_2`
+quedó con solo los pesos 600/700 (los únicos usados en el código). LCP
+mediano en producción: 3.50s → 3.10s (imagen) → 2.82s (fuentes),
+Performance mediano 84 → 87 → 90 — por debajo del objetivo de LCP
+≤2.5s pero sin regresión funcional; el resto del presupuesto (Baloo 2
++ la propia descarga de la imagen bajo throttling real) queda como
+posible trabajo futuro, no abordado en este deploy a propósito.
