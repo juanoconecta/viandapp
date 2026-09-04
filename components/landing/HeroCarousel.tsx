@@ -180,6 +180,17 @@ export default function HeroCarousel({ fotos }: { fotos: FotoCarrusel[] }) {
                 fill
                 sizes="(min-width: 1024px) 45vw, 100vw"
                 priority={i === 0}
+                // `priority` por sí solo ya genera el <link rel="preload">
+                // en el <head> (confirmado — la imagen se descubre antes
+                // de que React hidrate), pero en esta versión de Next NO
+                // agrega `fetchpriority="high"` ni al link ni al <img>
+                // (confirmado con Lighthouse: "LCP request discovery"
+                // fallaba en `priorityHinted`). `fetchPriority` es una
+                // prop separada y reconocida por `next/image` — se pasa
+                // explícitamente solo en la primera foto, la única que
+                // debe competir de verdad por ancho de banda apenas carga
+                // la página.
+                fetchPriority={i === 0 ? "high" : undefined}
                 className="object-cover"
                 onLoad={() => setCargadas((prev) => new Set(prev).add(i))}
                 onError={() => setFallidas((prev) => new Set(prev).add(i))}
