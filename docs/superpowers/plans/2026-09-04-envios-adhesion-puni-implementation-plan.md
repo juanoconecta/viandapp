@@ -5,68 +5,83 @@
 > `superpowers:executing-plans` para implementar tarea por tarea. Los pasos
 > usan sintaxis de checkbox (`- [ ]`).
 
+**Revisión correctiva 2026-09-04** sobre el commit `4196de3`: la tabla
+`puni_adhesiones` queda sin ninguna policy pública de SELECT — la
+superficie pública se sirve por consulta server-only, nunca por RLS/vista
+(Task 1, Task 7); el costo de Puni lo carga la vendedora, no el admin
+(Task 1 trigger, Task 3, Task 4, Task 5, Task 6); `modalidadesDisponibles`
+excluye cualquier modalidad con costo `null`, incluida `envio_propio` sin
+`costo_envio_propio` cargado (Task 2); TDD ampliado con los casos de
+imposibilidad de auto-aprobarse y de leer `nota_admin` públicamente
+(Task 8, nueva).
+
 **Objetivo:** exponer retiro/envío propio (costo, cobertura) en el perfil
-de viandera, y un flujo de solicitud/aprobación de adhesión a Puni que solo
-el admin puede resolver.
+de viandera, y un flujo de solicitud/aprobación de adhesión a Puni donde
+el admin solo verifica y resuelve el estado — la vendedora configura el
+costo que cobra por esa modalidad.
 
 **Arquitectura:** dos columnas nuevas en `vianderas` + una tabla nueva
-`puni_adhesiones` con RLS de dos capas (la vendedora solo puede llegar a
-`pendiente`, el admin resuelve el resto vía `createAdminClient()`). Una
-vista pública mínima (`puni_adhesion_publica`) para la insignia.
+`puni_adhesiones`, **totalmente privada** por RLS (ninguna policy para
+`anon`/`authenticated` más allá de "la vendedora ve/actualiza su propia
+fila"). La superficie pública (insignia, costo para el carrito) se sirve
+mediante una función server-only con `createAdminClient()` y un `select`
+explícito de columnas — nunca una vista ni policy pública.
 
 **Tech Stack:** Next.js 16 App Router, Server Actions, Supabase Postgres +
-RLS, Vitest.
+RLS, Vitest + Vitest de integración (ver Task 0 del plan de Carrito y
+pedidos, se reutiliza la misma infraestructura acá).
 
 **Spec:** `docs/superpowers/specs/2026-09-04-envios-adhesion-puni-design.md`
 
 **Requiere PRIMERO (fuera de este plan, antes de la Task 1):** confirmar en
 el Supabase Dashboard qué plan tiene el proyecto y si existe backup
-restaurable, exactamente el mismo preflight que ya se documentó para la
-migración del explorador (`CLAUDE.md`, sección "Migración de datos
-versionada") — esta migración también es aditiva (sin `drop`), pero el
-preflight de backup no se salta por eso.
+restaurable — mismo preflight que el resto de las migraciones del
+proyecto.
 
 ## Global Constraints
 
-- No tocar Supabase hasta que Codex revise este plan — ninguna tarea se
-  ejecuta todavía.
-- RLS habilitado en `puni_adhesiones` desde el `create table` mismo, nunca
-  como paso posterior.
-- La vendedora NUNCA puede escribir `estado = 'aprobada'` — ni por policy
-  de RLS ni por ningún Server Action expuesto a su sesión.
-- Las transiciones de admin (`aprobada`/`rechazada`/`suspendida`/
-  `revocada`) usan `createAdminClient()` gateado por `esAdmin(user?.email)`
-  — mismo patrón exacto que `invitarViandera` en `app/admin/actions.ts`.
-- `nota_admin` nunca se expone en ninguna vista ni policy pública.
+- No tocar Supabase hasta que Codex revise este plan.
+- RLS habilitado en `puni_adhesiones` desde el `create table` mismo.
+  **Ninguna policy de SELECT para `anon`/`authenticated`** — la única
+  policy de select es "la vendedora ve su propia fila". Cero excepciones,
+  cero vistas públicas.
+- La vendedora NUNCA puede escribir `estado = 'aprobada'`.
+- El admin NUNCA escribe `costo_envio_puni` — ninguna Server Action de
+  `app/admin/actions.ts` acepta ese campo como input.
+- Una modalidad con costo `null` (`costo_envio_propio` o
+  `costo_envio_puni`) nunca aparece en `modalidadesDisponibles`.
+- Las transiciones de admin usan `createAdminClient()` gateado por
+  `esAdmin(user?.email)` — mismo patrón que `invitarViandera`.
+- `nota_admin`/`resuelto_por`/`resuelto_en` nunca alcanzables desde
+  `anon`/`authenticated` bajo ninguna vía.
 - Sin nuevas dependencias de npm.
-- Cada ruta raíz nueva se suma a `RUTAS_RESERVADAS`
-  (`lib/viandera/slug.ts`) — esta entrega no agrega rutas raíz nuevas, así
-  que no aplica, pero queda documentado por si el plan de Alianza Puni
-  decide una ruta propia.
-- Todas las funciones puras de negocio (transiciones válidas, modalidades
-  disponibles, costo vigente) se escriben con TDD: test que falla primero,
-  implementación mínima después.
+- Cada ruta raíz nueva se suma a `RUTAS_RESERVADAS` — no aplica en esta
+  entrega.
+- Todas las funciones puras de negocio llevan TDD: test que falla
+  primero.
 
 ---
 
-### Task 1: Migración — columnas de envío en `vianderas` + tabla `puni_adhesiones`
+### Task 1: Migración — columnas de envío en `vianderas` + tabla `puni_adhesiones` privada
 
 **Files:**
 - Create: `supabase/migrations/202609040001_envios_adhesion_puni.sql`
-- Modify: `types/index.ts:13-28` (agregar campos a `Viandera`, agregar tipo
+- Modify: `types/index.ts` (agregar campos a `Viandera`, agregar tipo
   `PuniAdhesion` y su entrada en `Database.public.Tables`)
 
 **Interfaces:**
-- Produce: tablas `vianderas` (extendida) y `puni_adhesiones`, vista
-  `puni_adhesion_publica` — consumidas por las Tasks 2-6 y por el plan de
-  Carrito y pedidos.
+- Produce: tablas `vianderas` (extendida) y `puni_adhesiones` — esta
+  última **sin ninguna vía de lectura pública a nivel de base**; la
+  Task 7 construye la única superficie pública, server-only.
 
 - [ ] **Paso 1: Escribir la migración**
 
 ```sql
 -- Envíos a nivel de cocina + adhesión administrada a Puni.
--- Aditiva: sin drop de tablas/columnas. Repetible (if not exists / or replace).
--- Preflight de backup ya confirmado fuera de este script (ver plan).
+-- puni_adhesiones queda totalmente privada por RLS: la única policy de
+-- select es "la vendedora ve su propia fila". Sin vista ni policy
+-- pública — la superficie pública se sirve server-only (ver plan, Task 7).
+-- Aditiva, repetible, transaccional.
 
 begin;
 
@@ -96,35 +111,45 @@ create trigger puni_adhesiones_set_updated_at
 before update on public.puni_adhesiones
 for each row execute function public.viandapp_set_updated_at();
 
--- Bloquea que una sesión sin service role toque cualquier columna que no
--- sea `estado` (y solo en la transición rechazada/revocada -> pendiente).
-create or replace function public.puni_adhesiones_bloquear_campos_no_admin()
+-- Dos casos válidos para sesiones sin service role: (1) re-solicitar tras
+-- rechazo/revocación, (2) actualizar costo_envio_puni mientras aprobada.
+-- Cualquier otra cosa (incluido cualquier intento de escribir 'aprobada')
+-- se rechaza. El admin (service_role) no pasa por acá.
+create or replace function public.puni_adhesiones_validar_update_vendedora()
 returns trigger language plpgsql as $$
 begin
   if current_setting('role', true) = 'service_role' then
     return new;
   end if;
 
-  if old.estado not in ('rechazada', 'revocada') or new.estado != 'pendiente' then
-    raise exception 'transicion no permitida para esta sesion';
+  if old.estado in ('rechazada', 'revocada') and new.estado = 'pendiente' then
+    if new.costo_envio_puni is distinct from old.costo_envio_puni
+       or new.nota_admin is distinct from old.nota_admin
+       or new.resuelto_por is distinct from old.resuelto_por
+       or new.resuelto_en is distinct from old.resuelto_en then
+      raise exception 'al re-solicitar solo se puede cambiar el estado';
+    end if;
+    return new;
   end if;
 
-  if new.costo_envio_puni is distinct from old.costo_envio_puni
-     or new.nota_admin is distinct from old.nota_admin
-     or new.resuelto_por is distinct from old.resuelto_por
-     or new.resuelto_en is distinct from old.resuelto_en
-     or new.viandera_id is distinct from old.viandera_id then
-    raise exception 'solo se puede modificar el estado';
+  if old.estado = 'aprobada' and new.estado = 'aprobada' then
+    if new.nota_admin is distinct from old.nota_admin
+       or new.resuelto_por is distinct from old.resuelto_por
+       or new.resuelto_en is distinct from old.resuelto_en
+       or new.viandera_id is distinct from old.viandera_id then
+      raise exception 'solo se puede actualizar el costo de envio';
+    end if;
+    return new;
   end if;
 
-  return new;
+  raise exception 'transicion no permitida para esta sesion';
 end;
 $$;
 
-drop trigger if exists puni_adhesiones_bloquear_campos on public.puni_adhesiones;
-create trigger puni_adhesiones_bloquear_campos
+drop trigger if exists puni_adhesiones_validar_update on public.puni_adhesiones;
+create trigger puni_adhesiones_validar_update
 before update on public.puni_adhesiones
-for each row execute function public.puni_adhesiones_bloquear_campos_no_admin();
+for each row execute function public.puni_adhesiones_validar_update_vendedora();
 
 create policy "viandera ve su propia adhesion"
   on public.puni_adhesiones for select
@@ -139,70 +164,28 @@ create policy "viandera solicita adhesion"
     and resuelto_por is null
   );
 
-create policy "viandera re-solicita adhesion"
+create policy "viandera actualiza su propia adhesion"
   on public.puni_adhesiones for update
-  using (
-    viandera_id in (select id from public.vianderas where user_id = auth.uid())
-    and estado in ('rechazada', 'revocada')
-  )
-  with check (estado = 'pendiente');
+  using (viandera_id in (select id from public.vianderas where user_id = auth.uid()));
 
-create policy "cualquiera ve adhesiones aprobadas"
-  on public.puni_adhesiones for select
-  to anon, authenticated
-  using (estado = 'aprobada');
-
-create view public.puni_adhesion_publica
-with (security_invoker = true) as
-select viandera_id, costo_envio_puni
-from public.puni_adhesiones
-where estado = 'aprobada';
+-- Deliberadamente sin ninguna policy de select para anon/authenticated.
+-- No hay vista pública. Ver Task 7 para la superficie pública server-only.
 
 commit;
 ```
 
-- [ ] **Paso 2: Actualizar `types/index.ts`**
-
-Agregar a `Viandera`: `costo_envio_propio: number | null;` y
-`cobertura_envio: string | null;`. Agregar tipo nuevo:
-
-```ts
-export type EstadoAdhesionPuni =
-  | "pendiente"
-  | "aprobada"
-  | "rechazada"
-  | "suspendida"
-  | "revocada";
-
-export type PuniAdhesion = {
-  id: string;
-  viandera_id: string;
-  estado: EstadoAdhesionPuni;
-  costo_envio_puni: number | null;
-  solicitado_en: string;
-  resuelto_en: string | null;
-  resuelto_por: string | null;
-  nota_admin: string | null;
-  created_at: string;
-  updated_at: string;
-};
-```
-
-Y la entrada `puni_adhesiones` en `Database.public.Tables` siguiendo
-exactamente el patrón de `vianderas` (Insert omite `id`/`created_at`/
-`updated_at`, con los campos resueltos por admin como `Partial`).
+- [ ] **Paso 2: Actualizar `types/index.ts`** — sin cambios respecto a la
+  versión anterior de este plan (`Viandera` con los dos campos nuevos,
+  tipo `PuniAdhesion`, entrada en `Database`).
 
 - [ ] **Paso 3: Commit**
 
 ```bash
 git add supabase/migrations/202609040001_envios_adhesion_puni.sql types/index.ts
-git commit -m "feat: add migration for shipping config and Puni adhesion"
+git commit -m "feat: add migration for shipping config and private Puni adhesion table"
 ```
 
-**No aplicar la migración todavía** — queda en el repo hasta la
-integración final aprobada (mismo criterio que
-`202609030001_explorador_mvp.sql`, que sigue sin aplicar según
-`CLAUDE.md`).
+**No aplicar la migración todavía.**
 
 ---
 
@@ -216,93 +199,17 @@ integración final aprobada (mismo criterio que
 
 **Interfaces:**
 - Produce: `modalidadesDisponibles`, `costoEnvioVigente`,
-  `transicionValida` — consumidos por Tasks 3-6 y reexportados por el plan
-  de Carrito y pedidos (no se duplica la implementación ahí).
+  `transicionValida` — consumidos por Tasks 3-7 y reexportados por el plan
+  de Carrito y pedidos.
 
-- [ ] **Paso 1: Test de `transicionValida` (falla primero)**
-
-```ts
-// lib/envios/transiciones.test.ts
-import { describe, expect, it } from "vitest";
-import { transicionValida, type EstadoAdhesionPuni } from "./transiciones";
-
-describe("transicionValida", () => {
-  it("permite pendiente -> aprobada solo para admin", () => {
-    expect(transicionValida("pendiente", "aprobada", "admin")).toBe(true);
-    expect(transicionValida("pendiente", "aprobada", "viandera")).toBe(false);
-  });
-
-  it("permite pendiente -> rechazada solo para admin", () => {
-    expect(transicionValida("pendiente", "rechazada", "admin")).toBe(true);
-    expect(transicionValida("pendiente", "rechazada", "viandera")).toBe(false);
-  });
-
-  it("permite aprobada -> suspendida y aprobada -> revocada solo para admin", () => {
-    expect(transicionValida("aprobada", "suspendida", "admin")).toBe(true);
-    expect(transicionValida("aprobada", "revocada", "admin")).toBe(true);
-    expect(transicionValida("aprobada", "suspendida", "viandera")).toBe(false);
-  });
-
-  it("permite suspendida -> aprobada y suspendida -> revocada solo para admin", () => {
-    expect(transicionValida("suspendida", "aprobada", "admin")).toBe(true);
-    expect(transicionValida("suspendida", "revocada", "admin")).toBe(true);
-  });
-
-  it("permite rechazada -> pendiente y revocada -> pendiente solo para viandera", () => {
-    expect(transicionValida("rechazada", "pendiente", "viandera")).toBe(true);
-    expect(transicionValida("revocada", "pendiente", "viandera")).toBe(true);
-    expect(transicionValida("rechazada", "pendiente", "admin")).toBe(false);
-  });
-
-  it("rechaza cualquier transicion no listada", () => {
-    expect(transicionValida("pendiente", "suspendida", "admin")).toBe(false);
-    expect(transicionValida("aprobada", "pendiente", "admin")).toBe(false);
-    expect(transicionValida("aprobada", "aprobada", "admin")).toBe(false);
-  });
-});
-```
-
-- [ ] **Paso 2: Correr el test, confirmar que falla** (`transiciones.ts` no
-  existe todavía).
-
-- [ ] **Paso 3: Implementación mínima**
-
-```ts
-// lib/envios/transiciones.ts
-export type EstadoAdhesionPuni =
-  | "pendiente"
-  | "aprobada"
-  | "rechazada"
-  | "suspendida"
-  | "revocada";
-
-type Quien = "admin" | "viandera";
-
-const TRANSICIONES_ADMIN: Record<string, EstadoAdhesionPuni[]> = {
-  pendiente: ["aprobada", "rechazada"],
-  aprobada: ["suspendida", "revocada"],
-  suspendida: ["aprobada", "revocada"],
-};
-
-const TRANSICIONES_VIANDERA: Record<string, EstadoAdhesionPuni[]> = {
-  rechazada: ["pendiente"],
-  revocada: ["pendiente"],
-};
-
-export function transicionValida(
-  desde: EstadoAdhesionPuni,
-  hacia: EstadoAdhesionPuni,
-  quien: Quien,
-): boolean {
-  const tabla = quien === "admin" ? TRANSICIONES_ADMIN : TRANSICIONES_VIANDERA;
-  return (tabla[desde] ?? []).includes(hacia);
-}
-```
-
-- [ ] **Paso 4: Correr el test, confirmar que pasa.**
+- [ ] **Paso 1-4**: `transicionValida` — sin cambios respecto a la versión
+  anterior de este plan (la tabla de transiciones de admin/vendedora ya
+  no incluye costo como parámetro en ningún caso, así que no había nada
+  que corregir acá — el error de la revisión anterior estaba en el
+  Server Action de admin, Task 4, no en esta función).
 
 - [ ] **Paso 5: Test de `modalidadesDisponibles` y `costoEnvioVigente`
-  (falla primero)**
+  (falla primero) — con los casos nuevos de esta revisión**
 
 ```ts
 // lib/envios/modalidades.test.ts
@@ -322,22 +229,45 @@ describe("modalidadesDisponibles", () => {
     expect(modalidadesDisponibles(vianderaBase, null)).not.toContain("retiro");
   });
 
-  it("incluye envio_propio solo si ofrece_envio", () => {
-    expect(modalidadesDisponibles({ ...vianderaBase, ofrece_envio: true }, null))
-      .toContain("envio_propio");
+  it("envio_propio requiere ofrece_envio Y un costo_envio_propio no nulo", () => {
+    expect(
+      modalidadesDisponibles(
+        { ...vianderaBase, ofrece_envio: true, costo_envio_propio: 600 },
+        null,
+      ),
+    ).toContain("envio_propio");
+    // Caso corregido en esta revisión: ofrece_envio=true pero sin costo
+    // cargado NO habilita la modalidad.
+    expect(
+      modalidadesDisponibles({ ...vianderaBase, ofrece_envio: true }, null),
+    ).not.toContain("envio_propio");
   });
 
-  it("incluye envio_puni solo si la adhesion esta aprobada", () => {
+  it("envio_propio con costo 0 (gratis explicito) SI esta disponible", () => {
+    expect(
+      modalidadesDisponibles(
+        { ...vianderaBase, ofrece_envio: true, costo_envio_propio: 0 },
+        null,
+      ),
+    ).toContain("envio_propio");
+  });
+
+  it("envio_puni requiere estado aprobada Y costo_envio_puni cargado", () => {
     expect(
       modalidadesDisponibles(vianderaBase, { estado: "aprobada", costo_envio_puni: 500 }),
     ).toContain("envio_puni");
+    // Caso corregido en esta revisión: aprobada pero sin costo cargado
+    // todavia NO habilita la modalidad.
+    expect(
+      modalidadesDisponibles(vianderaBase, { estado: "aprobada", costo_envio_puni: null }),
+    ).not.toContain("envio_puni");
     expect(
       modalidadesDisponibles(vianderaBase, { estado: "pendiente", costo_envio_puni: null }),
     ).not.toContain("envio_puni");
     expect(modalidadesDisponibles(vianderaBase, null)).not.toContain("envio_puni");
   });
 
-  it("devuelve array vacio si la cocina no ofrece nada", () => {
+  it("devuelve array vacio si la cocina no ofrece nada utilizable", () => {
     expect(modalidadesDisponibles(vianderaBase, null)).toEqual([]);
   });
 });
@@ -347,25 +277,33 @@ describe("costoEnvioVigente", () => {
     expect(costoEnvioVigente("retiro", vianderaBase, null)).toBe(0);
   });
 
-  it("envio_propio usa costo_envio_propio, o null si es a coordinar", () => {
+  it("envio_propio usa costo_envio_propio, incluido null", () => {
     expect(
       costoEnvioVigente("envio_propio", { ...vianderaBase, costo_envio_propio: 600 }, null),
     ).toBe(600);
     expect(costoEnvioVigente("envio_propio", vianderaBase, null)).toBeNull();
   });
 
-  it("envio_puni usa el costo_envio_puni de la adhesion aprobada", () => {
+  it("envio_puni usa el costo_envio_puni cargado por la vendedora", () => {
     expect(
       costoEnvioVigente("envio_puni", vianderaBase, {
         estado: "aprobada",
         costo_envio_puni: 700,
       }),
     ).toBe(700);
+    expect(
+      costoEnvioVigente("envio_puni", vianderaBase, {
+        estado: "aprobada",
+        costo_envio_puni: null,
+      }),
+    ).toBeNull();
   });
 });
 ```
 
-- [ ] **Paso 6: Implementación mínima**
+- [ ] **Paso 6: Implementación mínima** — la diferencia clave respecto a
+  la versión anterior de este plan: `modalidadesDisponibles` ahora exige
+  costo no-nulo, no solo el flag booleano/estado.
 
 ```ts
 // lib/envios/modalidades.ts
@@ -382,17 +320,6 @@ type AdhesionResumen = {
   costo_envio_puni: number | null;
 } | null;
 
-export function modalidadesDisponibles(
-  viandera: VianderaEnvio,
-  adhesion: AdhesionResumen,
-): Modalidad[] {
-  const modalidades: Modalidad[] = [];
-  if (viandera.ofrece_retiro) modalidades.push("retiro");
-  if (viandera.ofrece_envio) modalidades.push("envio_propio");
-  if (adhesion?.estado === "aprobada") modalidades.push("envio_puni");
-  return modalidades;
-}
-
 export function costoEnvioVigente(
   modalidad: Modalidad,
   viandera: VianderaEnvio,
@@ -402,6 +329,20 @@ export function costoEnvioVigente(
   if (modalidad === "envio_propio") return viandera.costo_envio_propio;
   return adhesion?.costo_envio_puni ?? null;
 }
+
+export function modalidadesDisponibles(
+  viandera: VianderaEnvio,
+  adhesion: AdhesionResumen,
+): Modalidad[] {
+  const candidatas: Modalidad[] = [];
+  if (viandera.ofrece_retiro) candidatas.push("retiro");
+  if (viandera.ofrece_envio) candidatas.push("envio_propio");
+  if (adhesion?.estado === "aprobada") candidatas.push("envio_puni");
+
+  return candidatas.filter(
+    (modalidad) => costoEnvioVigente(modalidad, viandera, adhesion) !== null,
+  );
+}
 ```
 
 - [ ] **Paso 7: Correr los tests, confirmar que pasan.**
@@ -410,49 +351,41 @@ export function costoEnvioVigente(
 
 ```bash
 git add lib/envios/
-git commit -m "feat: add pure shipping-modality and adhesion-transition logic with tests"
+git commit -m "feat: add pure shipping-modality logic that excludes null-cost options"
 ```
 
 ---
 
-### Task 3: Server Actions de vendedora (solicitar/re-solicitar adhesión, guardar config de envío)
+### Task 3: Server Actions de vendedora (solicitar adhesión, configurar costo, guardar envío)
 
 **Files:**
-- Modify: `app/viandera/actions.ts` (agregar `actualizarPerfil` — extender
-  la función existente con los campos nuevos — y agregar
-  `solicitarAdhesionPuni`)
+- Modify: `app/viandera/actions.ts` (extender `actualizarPerfil`, agregar
+  `solicitarAdhesionPuni` y **`actualizarCostoEnvioPuni`**, nueva en esta
+  revisión)
 
 **Interfaces:**
-- Consume: `transicionValida` (Task 2) para validar la re-solicitud antes
-  de pegarle a la base (la RLS es la garantía real; esta llamada es para
-  devolver un mensaje de error claro en vez de un error crudo de Postgres).
-- Produce: `EstadoAdhesionPuni` (tipo de resultado del Server Action,
-  distinto del tipo de dominio `EstadoAdhesionPuni` en `lib/envios` — si
-  hay colisión de nombre, renombrar el de resultado a
-  `ResultadoSolicitudAdhesion`).
+- Consume: `transicionValida` (Task 2).
 
-- [ ] **Paso 1: Extender `actualizarPerfil` con los campos de envío**
+- [ ] **Paso 1: Extender `actualizarPerfil`** — sin cambios respecto a la
+  versión anterior de este plan.
 
-Agregar lectura de `formData.get("ofrece_retiro")`,
-`formData.get("ofrece_envio")`, `formData.get("costo_envio_propio")`
-(string vacío → `null`, no `0`), `formData.get("cobertura_envio")` al
-payload de `update` existente sobre `vianderas`. Validación: si
-`ofrece_envio` es `false`, forzar `costo_envio_propio` y
-`cobertura_envio` a `null` en el payload (evita guardar config de envío
-"fantasma" que la UI ya no muestra).
+- [ ] **Paso 2: `solicitarAdhesionPuni`** — sin cambios respecto a la
+  versión anterior de este plan (sigue usando `createClient()`, no
+  `createAdminClient()` — la RLS ya garantiza que solo llega a
+  `pendiente`).
 
-- [ ] **Paso 2: `solicitarAdhesionPuni`**
+- [ ] **Paso 3: `actualizarCostoEnvioPuni`** (nueva)
 
 ```ts
-export type ResultadoSolicitudAdhesion =
+export type ResultadoActualizarCostoPuni =
   | { status: "idle" }
   | { status: "error"; mensaje: string }
   | { status: "ok" };
 
-export async function solicitarAdhesionPuni(
-  _prevState: ResultadoSolicitudAdhesion,
-  _formData: FormData,
-): Promise<ResultadoSolicitudAdhesion> {
+export async function actualizarCostoEnvioPuni(
+  _prevState: ResultadoActualizarCostoPuni,
+  formData: FormData,
+): Promise<ResultadoActualizarCostoPuni> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { status: "error", mensaje: "No autenticado." };
@@ -464,69 +397,67 @@ export async function solicitarAdhesionPuni(
     .single();
   if (!viandera) return { status: "error", mensaje: "No encontramos tu cocina." };
 
-  const { data: existente } = await supabase
+  const { data: adhesion } = await supabase
     .from("puni_adhesiones")
     .select("estado")
     .eq("viandera_id", viandera.id)
     .maybeSingle();
 
-  if (!existente) {
-    const { error } = await supabase
-      .from("puni_adhesiones")
-      .insert({ viandera_id: viandera.id, estado: "pendiente" });
-    if (error) return { status: "error", mensaje: "No pudimos enviar la solicitud." };
-    revalidatePath("/viandera/perfil");
-    return { status: "ok" };
+  if (adhesion?.estado !== "aprobada") {
+    return { status: "error", mensaje: "Tu adhesión todavía no está aprobada." };
   }
 
-  if (!transicionValida(existente.estado, "pendiente", "viandera")) {
-    return {
-      status: "error",
-      mensaje: "No podés volver a solicitar desde el estado actual.",
-    };
+  const costoRaw = String(formData.get("costoEnvioPuni") ?? "").trim();
+  const costo = costoRaw ? Number(costoRaw) : null;
+  if (costoRaw && (Number.isNaN(costo) || (costo as number) < 0)) {
+    return { status: "error", mensaje: "Costo inválido." };
   }
 
+  // Vía RLS (createClient, no admin) — el trigger de la Task 1 ya
+  // garantiza que esta sesión, sin ser service_role, solo puede tocar
+  // costo_envio_puni mientras estado sigue en 'aprobada'.
   const { error } = await supabase
     .from("puni_adhesiones")
-    .update({ estado: "pendiente" })
+    .update({ costo_envio_puni: costo, estado: "aprobada" })
     .eq("viandera_id", viandera.id);
-  if (error) return { status: "error", mensaje: "No pudimos reenviar la solicitud." };
+
+  if (error) return { status: "error", mensaje: "No pudimos guardar el costo." };
   revalidatePath("/viandera/perfil");
   return { status: "ok" };
 }
 ```
 
-Nota: este Server Action usa `createClient()` (respeta RLS), no
-`createAdminClient()` — la RLS de `puni_adhesiones` ya garantiza que solo
-puede llegar a `pendiente`; no hace falta escalar privilegios acá.
+Nota: `estado: "aprobada"` se reenvía sin cambio en el `update` a
+propósito — el trigger de la Task 1 compara `old.estado = new.estado =
+'aprobada'` para permitir el caso 2; omitir el campo dejaría a Supabase
+sin tocarlo (lo cual también sería válido), pero enviarlo explícito hace
+la intención legible en el código.
 
-- [ ] **Paso 3: Tests de integración livianos**
+- [ ] **Paso 4: Tests** — sin usuario autenticado devuelve error; sin
+  adhesión aprobada devuelve error sin intentar el update (mock que
+  falla si se invoca); costo negativo o no numérico rechazado antes de
+  tocar la base.
 
-`app/viandera/actions.test.ts` (si no existe, crearlo) — mockear
-`createClient` para verificar: sin usuario autenticado devuelve error;
-`transicionValida` rechaza una re-solicitud desde `aprobada` sin llegar a
-tocar la base (test de la rama de error, con un mock de Supabase que
-lanzaría si se llamara `update`).
-
-- [ ] **Paso 4: Commit**
+- [ ] **Paso 5: Commit**
 
 ```bash
 git add app/viandera/actions.ts app/viandera/actions.test.ts
-git commit -m "feat: add seller-side shipping config and Puni adhesion request action"
+git commit -m "feat: let sellers request Puni adhesion and set their own Puni shipping cost"
 ```
 
 ---
 
-### Task 4: Server Actions de admin (aprobar/rechazar/suspender/revocar)
+### Task 4: Server Actions de admin (aprobar/rechazar/suspender/revocar — sin costo)
 
 **Files:**
 - Modify: `app/admin/actions.ts`
 
 **Interfaces:**
-- Consume: `esAdmin` (existente), `createAdminClient` (existente),
-  `transicionValida` (Task 2).
+- Consume: `esAdmin`, `createAdminClient` (existentes), `transicionValida`
+  (Task 2).
 
-- [ ] **Paso 1: `resolverAdhesionPuni`**
+- [ ] **Paso 1: `resolverAdhesionPuni`** — versión corregida: **no acepta
+  ni procesa `costoEnvioPuni`** en ningún caso, ni siquiera al aprobar.
 
 ```ts
 export type ResultadoResolverAdhesion =
@@ -545,7 +476,6 @@ export async function resolverAdhesionPuni(
   const adhesionId = String(formData.get("adhesionId") ?? "");
   const nuevoEstado = String(formData.get("estado") ?? "") as EstadoAdhesionPuni;
   const notaAdmin = String(formData.get("notaAdmin") ?? "").trim() || null;
-  const costoEnvioPuniRaw = String(formData.get("costoEnvioPuni") ?? "").trim();
 
   if (!adhesionId || !nuevoEstado) {
     return { status: "error", mensaje: "Faltan datos." };
@@ -563,10 +493,6 @@ export async function resolverAdhesionPuni(
     return { status: "error", mensaje: "Esa transición no es válida desde el estado actual." };
   }
 
-  if (nuevoEstado === "aprobada" && !costoEnvioPuniRaw) {
-    return { status: "error", mensaje: "Cargá el costo de envío acordado con Puni." };
-  }
-
   const { error } = await admin
     .from("puni_adhesiones")
     .update({
@@ -574,9 +500,6 @@ export async function resolverAdhesionPuni(
       nota_admin: notaAdmin,
       resuelto_en: new Date().toISOString(),
       resuelto_por: user!.email,
-      ...(nuevoEstado === "aprobada"
-        ? { costo_envio_puni: Number(costoEnvioPuniRaw) }
-        : {}),
     })
     .eq("id", adhesionId);
 
@@ -587,17 +510,22 @@ export async function resolverAdhesionPuni(
 }
 ```
 
-- [ ] **Paso 2: Test — un usuario no-admin no puede resolver**
+- [ ] **Paso 2: Test — un usuario no-admin no puede resolver** — sin
+  cambios respecto a la versión anterior.
 
-Mock de `supabase.auth.getUser()` devolviendo un email distinto de
-`ADMIN_EMAIL`; verificar que la función devuelve `status: "error"` **sin**
-haber llamado a `createAdminClient` (spy que falla el test si se invoca).
+- [ ] **Paso 3: Test de integración (Task 0 del plan de Carrito) —
+  imposibilidad de auto-aprobarse**: con un cliente autenticado como la
+  vendedora (no `service_role`), un `update` directo a `puni_adhesiones`
+  intentando `estado = 'aprobada'` (desde `pendiente` o desde cualquier
+  otro estado) debe fallar por el trigger de la Task 1 — no alcanza con
+  probarlo solo a través de la Server Action, hay que confirmar que la
+  base lo rechaza aunque alguien bypasee la Server Action por completo.
 
-- [ ] **Paso 3: Commit**
+- [ ] **Paso 4: Commit**
 
 ```bash
 git add app/admin/actions.ts app/admin/actions.test.ts
-git commit -m "feat: add admin action to resolve Puni adhesion requests"
+git commit -m "feat: add admin action to resolve Puni adhesion requests without setting cost"
 ```
 
 ---
@@ -606,53 +534,43 @@ git commit -m "feat: add admin action to resolve Puni adhesion requests"
 
 **Files:**
 - Modify: `components/viandera/FormularioPerfil.tsx`
-- Modify: `app/viandera/perfil/page.tsx` (pasar los nuevos campos +
-  resumen de adhesión como props)
+- Create: `components/viandera/FormularioCostoPuni.tsx` (nuevo,
+  desacoplado del resto del perfil — su propio `useActionState` con
+  `actualizarCostoEnvioPuni`)
+- Modify: `app/viandera/perfil/page.tsx`
 
 **Interfaces:**
-- Consume: `actualizarPerfil` extendido (Task 3), `solicitarAdhesionPuni`
-  (Task 3).
+- Consume: `actualizarPerfil` extendido, `solicitarAdhesionPuni`,
+  `actualizarCostoEnvioPuni` (Task 3).
 
-- [ ] **Paso 1: Agregar al formulario** (siguiendo el mismo patrón visual
-  de campos existentes: `label` + `campoClase`, o un toggle si el proyecto
-  ya tiene un patrón de switch — si no, un checkbox estándar con
-  `min-h-[44px]` en el área clickeable):
-  - Checkbox "Ofrezco retiro" (`ofrece_retiro`).
-  - Checkbox "Ofrezco envío propio" (`ofrece_envio`) que revela
-    condicionalmente (mismo patrón de estado local que `ubicacion` en el
-    componente) los campos costo y cobertura.
-  - Input numérico "Costo de envío" con checkbox/toggle "A coordinar por
-    WhatsApp" que, si está tildado, deshabilita y vacía el input (mapea a
-    `null`).
-  - Textarea "Zona de cobertura" (`cobertura_envio`).
+- [ ] **Paso 1: Campos de retiro/envío propio** — sin cambios respecto a
+  la versión anterior de este plan, con una aclaración de copy: el campo
+  de costo vacío debe decir explícitamente algo como "sin cargar — esta
+  modalidad no va a aparecer en el carrito hasta que cargues un costo"
+  (ya no se llama "a coordinar", para no sugerir que es una opción usable
+  con ese estado).
 
-- [ ] **Paso 2: Sección "Envío mediante Puni"** (fuera del `<form>`
-  principal — es una acción propia con su propio Server Action, no un
-  campo que se guarda junto al resto del perfil):
-  - Si no hay `puni_adhesiones` para esta viandera: texto explicativo +
-    botón "Solicitar adhesión a Puni" (usa `useActionState` con
-    `solicitarAdhesionPuni`).
-  - Si `estado = 'pendiente'`: "Tu solicitud está en revisión."
-  - Si `estado = 'aprobada'`: "Adherida a Puni" + costo vigente
-    (solo lectura).
-  - Si `estado = 'rechazada'`/`'revocada'`: motivo si hay `nota_admin`, +
-    botón para volver a solicitar.
-  - Si `estado = 'suspendida'`: "Tu adhesión está suspendida temporalmente"
-    — sin botón de acción (solo el admin puede reactivarla).
+- [ ] **Paso 2: Sección "Envío mediante Puni"**:
+  - Sin solicitud / `pendiente` / `rechazada` / `revocada` / `suspendida`:
+    igual a la versión anterior de este plan.
+  - **`aprobada`** (corregido): en vez de mostrar el costo de solo
+    lectura, monta `FormularioCostoPuni` — un campo numérico editable +
+    botón "Guardar costo", con el mismo texto de advertencia de "sin
+    costo cargado, esta modalidad no aparece en el carrito de tus
+    compradores" cuando está vacío.
 
-- [ ] **Paso 3: Verificar responsive** 375/768/1024/1440px, sin scroll
-  horizontal, objetivos táctiles ≥44px.
+- [ ] **Paso 3: Verificar responsive** 375/768/1024/1440px.
 
 - [ ] **Paso 4: Commit**
 
 ```bash
-git add components/viandera/FormularioPerfil.tsx app/viandera/perfil/page.tsx
-git commit -m "feat: expose shipping config and Puni adhesion request in seller profile"
+git add components/viandera/FormularioPerfil.tsx components/viandera/FormularioCostoPuni.tsx app/viandera/perfil/page.tsx
+git commit -m "feat: let sellers configure their own Puni shipping cost from their profile"
 ```
 
 ---
 
-### Task 6: UI de admin — resolver solicitudes en `/admin`
+### Task 6: UI de admin — resolver solicitudes en `/admin` (sin costo)
 
 **Files:**
 - Modify: `app/admin/page.tsx`
@@ -661,92 +579,148 @@ git commit -m "feat: expose shipping config and Puni adhesion request in seller 
 **Interfaces:**
 - Consume: `resolverAdhesionPuni` (Task 4).
 
-- [ ] **Paso 1: Sección nueva en `/admin`** listando `puni_adhesiones` con
-  `estado = 'pendiente'` primero (orden: pendientes, luego aprobadas,
-  luego el resto) — un `TarjetaSolicitudPuni` por fila con nombre de la
-  cocina (join a `vianderas.nombre`), fecha de solicitud, y los botones de
-  acción correspondientes al estado actual (usar `transicionValida` en el
-  cliente solo para decidir qué botones mostrar — la validación real sigue
-  siendo server-side en la Task 4).
+- [ ] **Paso 1: Sección nueva en `/admin`** — igual a la versión anterior
+  de este plan.
 
-- [ ] **Paso 2: Formulario de aprobación** pide `costoEnvioPuni` (input
-  numérico obligatorio) antes de habilitar el submit.
+- [ ] **Paso 2: Formulario de aprobación** (corregido): **sin campo de
+  costo**. Aprobar es una acción de un solo clic (más un campo opcional
+  de nota si se rechaza) — el admin no carga ningún número de Puni.
 
 - [ ] **Paso 3: Commit**
 
 ```bash
 git add app/admin/page.tsx components/admin/TarjetaSolicitudPuni.tsx
-git commit -m "feat: add admin UI to resolve Puni adhesion requests"
+git commit -m "feat: add admin UI to approve or reject Puni adhesion requests"
 ```
 
 ---
 
-### Task 7: Insignia pública "Adherido a Puni"
+### Task 7: Superficie pública server-only + insignia "Adherido a Puni"
 
 **Files:**
-- Modify: `lib/viandas/consultas.ts` (sumar el join opcional a
-  `puni_adhesion_publica` en `buscarPlatos`, exponer
-  `viandera.adheridaAPuni: boolean` en `ResultadoPlato`)
-- Modify: `app/[slug]/page.tsx` (mismo join para el perfil individual)
+- Create: `lib/envios/adhesionPublica.ts` (nuevo — reemplaza la vista
+  pública de la revisión anterior)
+- Create: `lib/envios/adhesionPublica.test.ts`
+- Modify: `lib/viandas/consultas.ts` (usar `adhesionesAprobadas` en vez
+  de un join a una vista, en `buscarPlatos`)
+- Modify: `app/[slug]/page.tsx`
 - Modify: `components/consumer/DishCard.tsx` y
-  `components/storefront/StorefrontHeader.tsx` (mostrar la insignia)
+  `components/storefront/StorefrontHeader.tsx`
 
 **Interfaces:**
-- Consume: vista `puni_adhesion_publica` (Task 1).
+- Consume: `createAdminClient` (existente).
+- Produce: `adhesionesAprobadas` — usado también por la Server Action
+  `generarPedido` del plan de Carrito y pedidos para resolver el costo de
+  "envío mediante Puni".
 
-- [ ] **Paso 1: Extender `buscarPlatos`** con una tercera consulta (mismo
-  patrón de "dos consultas separadas" ya usado, por la falta de metadata
-  de relaciones en `Database`) a `puni_adhesion_publica`, filtrando por
-  las `vianderas_id` ya resueltas, y anexar `adheridaAPuni` al resultado.
+- [ ] **Paso 1: `adhesionPublica.ts`**
 
-- [ ] **Paso 2: Insignia visual** — un badge chico, ícono propio
-  (`components/landing/icons.tsx`, siguiendo el estilo de línea existente,
-  **nunca emoji**) + texto "Adherido a Puni", visible en la tarjeta de
-  resultado y en el encabezado del perfil público.
+```ts
+// lib/envios/adhesionPublica.ts
+import "server-only";
+import { createAdminClient } from "@/lib/supabase/admin";
 
-- [ ] **Paso 3: Test de `buscarPlatos`** — agregar un caso al test
-  existente (si existe) o crear uno nuevo verificando que
-  `adheridaAPuni` es `true` solo cuando hay una fila aprobada para esa
-  viandera.
+export type AdhesionAprobada = { viandera_id: string; costo_envio_puni: number | null };
 
-- [ ] **Paso 4: Commit**
+export async function adhesionesAprobadas(
+  vianderaIds: string[],
+): Promise<Map<string, AdhesionAprobada>> {
+  if (vianderaIds.length === 0) return new Map();
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("puni_adhesiones")
+    .select("viandera_id, costo_envio_puni")
+    .eq("estado", "aprobada")
+    .in("viandera_id", vianderaIds);
+
+  if (error) {
+    console.error("[envios] fallo al consultar adhesiones aprobadas", error);
+    return new Map();
+  }
+
+  return new Map((data ?? []).map((fila) => [fila.viandera_id, fila]));
+}
+```
+
+Nota deliberada: el `select` explícito de dos columnas es en sí mismo el
+control de seguridad — nunca `select('*')` en este archivo, y este
+archivo es el **único** lugar del código que consulta `puni_adhesiones`
+para lectura pública (todo lo demás pasa por acá, no se repite la
+consulta en cada componente).
+
+- [ ] **Paso 2: Test** — mockeando `createAdminClient`, confirmar que el
+  resultado nunca contiene una clave que no sea `viandera_id` o
+  `costo_envio_puni` (recorrer `Object.keys` de cada valor del Map y
+  comparar contra el set exacto `{viandera_id, costo_envio_puni}` — un
+  test que fallaría si alguien más adelante cambiara el `select` a `*`
+  por error).
+
+- [ ] **Paso 3: Extender `buscarPlatos`** — llamar `adhesionesAprobadas`
+  con las `vianderas_id` ya resueltas, anexar `adheridaAPuni: boolean` y
+  `costoEnvioPuni: number | null` al resultado.
+
+- [ ] **Paso 4: Insignia visual** — igual a la versión anterior de este
+  plan (ícono propio, nunca emoji).
+
+- [ ] **Paso 5: Test de `buscarPlatos`** — `adheridaAPuni` es `true` solo
+  cuando `adhesionesAprobadas` devuelve una entrada para esa viandera.
+
+- [ ] **Paso 6: Test de integración (Task 0 del plan de Carrito) —
+  imposibilidad de leer `nota_admin` públicamente**: con la `anon key`
+  (sin sesión autenticada), cualquier `select` contra `puni_adhesiones`
+  — incluido uno que pida `nota_admin` explícitamente — debe devolver
+  cero filas (confirmando que no hay ninguna policy de RLS que lo
+  permita, no solo que la función `adhesionesAprobadas` no lo pida).
+
+- [ ] **Paso 7: Commit**
 
 ```bash
-git add lib/viandas/consultas.ts app/[slug]/page.tsx components/consumer/DishCard.tsx components/storefront/StorefrontHeader.tsx components/landing/icons.tsx
-git commit -m "feat: show public Puni adhesion badge on storefront and search results"
+git add lib/envios/adhesionPublica.ts lib/envios/adhesionPublica.test.ts lib/viandas/consultas.ts app/[slug]/page.tsx components/consumer/DishCard.tsx components/storefront/StorefrontHeader.tsx components/landing/icons.tsx
+git commit -m "feat: show public Puni adhesion badge via a server-only, column-limited query"
 ```
 
 ---
 
 ## Checklist de seguridad (repasar antes de pedir revisión)
 
-- [ ] RLS habilitado en `puni_adhesiones`, sin policy que permita a la
-  vendedora escribir `estado = 'aprobada'` bajo ninguna condición.
-- [ ] Trigger `puni_adhesiones_bloquear_campos_no_admin` probado
-  manualmente contra un intento de update directo (no solo confiar en la
-  policy).
-- [ ] `nota_admin` nunca alcanzable desde `anon`/`authenticated` (ni por
-  policy, ni por la vista pública).
-- [ ] Las cuatro transiciones de admin verifican `esAdmin()` antes de
-  cualquier lectura/escritura con `createAdminClient()`.
-- [ ] `costo_envio_propio`/`costo_envio_puni` tienen `check (>= 0)` — no
-  se puede guardar un costo negativo por error de UI.
-- [ ] Ningún dato de Puni (nombre, condiciones) se inventa en la UI de
-  admin/vendedora — el costo lo carga el admin después de confirmar con
-  Puni, nunca un valor de ejemplo hardcodeado.
+- [ ] `select * from pg_policies where tablename = 'puni_adhesiones'`
+  muestra únicamente las tres policies de la vendedora (select propia,
+  insert propia, update propia) — **cero** policies para `anon` o con
+  `to authenticated` sin scoping por `user_id`.
+- [ ] Ninguna vista pública existe sobre `puni_adhesiones` (`select *
+  from information_schema.views where table_name like 'puni%'` no debe
+  devolver nada, o si algo existe, confirmar que no es accesible por
+  `anon`).
+- [ ] Trigger `puni_adhesiones_validar_update_vendedora` probado con test
+  de integración, no solo confiado por lectura del código: (a) intento de
+  auto-aprobarse falla, (b) actualizar costo mientras aprobada funciona y
+  no permite colar un cambio a `nota_admin` en la misma operación.
+- [ ] `resolverAdhesionPuni` (admin) no acepta ni procesa
+  `costoEnvioPuni` en ningún branch del código.
+- [ ] `actualizarCostoEnvioPuni` (vendedora) rechaza si la adhesión no
+  está `aprobada`, antes de cualquier intento de `update`.
+- [ ] `lib/envios/adhesionPublica.ts` es el único lugar del código que
+  lee `puni_adhesiones` para propósito público, y su `select` nunca pide
+  `nota_admin`/`resuelto_por`/`resuelto_en`/`estado` real (confirmado por
+  el test del Paso 2 de la Task 7).
+- [ ] `costo_envio_propio`/`costo_envio_puni` tienen `check (>= 0)`.
+- [ ] Ningún dato de Puni (nombre, condiciones) se inventa en la UI —
+  el costo lo carga la vendedora después de acordarlo con Puni fuera de
+  ViandApp, nunca un valor de ejemplo hardcodeado.
 
 ## QA responsive
 
-- [ ] `/viandera/perfil`: 375, 768, 1024, 1440px — formulario y sección de
-  adhesión sin scroll horizontal, toggles ≥44px.
-- [ ] `/admin`: nueva sección de solicitudes, mismos breakpoints.
-- [ ] Insignia pública en `/explorar` y `/{slug}`: no rompe el layout de
-  tarjeta existente en ningún breakpoint, no causa salto de layout (si el
-  ícono tarda en cargar, reservar el espacio).
+- [ ] `/viandera/perfil`: 375, 768, 1024, 1440px — formulario, sección de
+  adhesión, y el nuevo `FormularioCostoPuni` sin scroll horizontal,
+  campos ≥44px.
+- [ ] `/admin`: nueva sección de solicitudes (sin campo de costo en el
+  formulario de aprobación), mismos breakpoints.
+- [ ] Insignia pública en `/explorar` y `/{slug}`: sin salto de layout.
 
 ## Punto de detención
 
 **No ejecutar `git push`, merge, ni aplicar la migración hasta que Codex
-revise este plan.** Al terminar las Tasks 1-7 en una rama local, detenerse
-y reportar: qué se implementó, resultado de tests, cualquier desvío del
-plan y por qué.
+revise este plan.** Al terminar las Tasks 1-7, detenerse y reportar: qué
+se implementó, resultado de tests (unitarios e integración), y cualquier
+desvío del plan y por qué.

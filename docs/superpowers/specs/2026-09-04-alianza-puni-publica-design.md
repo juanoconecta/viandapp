@@ -1,96 +1,92 @@
 # Página pública de la alianza con Puni Rafaela — Diseño
 
-**Fecha:** 2026-09-04
-**Estado:** Propuesto — **bloqueado para implementación** hasta recibir los
-recursos oficiales de Puni (ver §1). La estructura, copy-guidelines y plan
-de tareas de esta spec son completos; el contenido real (logo, número de
-WhatsApp, texto autorizado) no lo es porque esos recursos no existen en
-este repositorio ni en las carpetas de assets conocidas.
+**Fecha:** 2026-09-04 (revisión correctiva 2026-09-04)
+**Estado:** Corregido tras revisión de Codex sobre el commit `4196de3` —
+pendiente de una segunda revisión antes de implementar. **Parcialmente
+desbloqueado**: el WhatsApp oficial y las fuentes de contenido llegaron en
+esta revisión (§1); el logo todavía no.
 **Depende de:** nada técnicamente. No requiere Carrito, Envíos ni CRM.
 
-## 1. Bloqueo confirmado — recursos de Puni no disponibles
+## 1. Recursos de Puni — estado actualizado
 
-Se inspeccionó explícitamente antes de escribir esta spec:
+En la revisión anterior se confirmó que ningún recurso de Puni existía en
+el repo ni en las carpetas de assets conocidas. Codex proveyó en esta
+revisión:
 
-- `grep -ri "puni"` en todo el repositorio (código, `public/`, docs): **cero
-  resultados**.
-- Carpeta personal de assets de marca ya usada en este proyecto
-  (`D:\jgCM\2026\jc\VIANDAPP\`, de donde salió `pinfinal.png`/`logofinal.png`
-  para el logo de ViandApp): contiene solo material propio de ViandApp
-  (logo, videos promocionales, spot de audio) — **nada de Puni**.
-- Ningún número de WhatsApp de Puni, logo, ni texto de condiciones
-  comerciales autorizado por Puni existe en ningún archivo de este repo.
+- **WhatsApp oficial publicado por Puni**: `+54 9 3548 63-5151`.
+- **Fuentes oficiales de contenido**: `https://www.puni.ar/comoFunciona`
+  y `https://www.puni.ar/queEsPuni`.
+- Confirmación explícita de que **ViandApp está autorizado a usar el
+  material de Puni**.
 
-Por lo tanto, **antes de implementar esta entrega hacen falta, provistos
-por el usuario (no inventados)**:
+Con esto se leyeron ambas páginas oficiales (2026-09-04) para extraer
+contenido citable. Resumen de lo que dicen (para uso en §4, con la
+atribución que exige §7):
 
-1. El logo de Puni en un formato usable (SVG o PNG con fondo transparente,
-   idealmente ambos para versión clara/oscura si Puni tiene variantes) y
-   confirmación explícita del derecho de uso (el brief dice que existe
-   autorización — falta el archivo y, si Puni tiene lineamientos de marca
-   como tamaño mínimo/zona de resguardo, esos lineamientos).
-2. El número de WhatsApp **oficial y autorizado** de Puni para "Consultar
-   servicios" (no un número personal ni de prueba).
-3. Cualquier texto que Puni específicamente pida que se use o se evite
-   (algunas marcas tienen condiciones sobre cómo se las menciona).
+- Puni se autodescribe como "la primera plataforma de logística on-demand
+  del interior" (`queEsPuni`).
+- Cero comisiones sobre productos — "Puni no interfiere en la venta: solo
+  se ocupa de que el envío suceda de forma eficiente" (`comoFunciona`).
+- Dos modalidades de entrega: **on-demand** (retiro inmediato) y
+  **programada** (`comoFunciona`).
+- Asignación automática de repartidor por zona, considerando "cercanía,
+  disponibilidad y momento del día" (`comoFunciona`).
+- Seguimiento: "tanto el comercio como el repartidor pueden seguir el
+  estado del envío y operar con información clara" (`comoFunciona`).
 
-Esta spec y su plan de implementación quedan listos para ejecutarse en
-cuanto lleguen — no hace falta rediseñar nada, solo completar los
-`TODO(puni-assets)` marcados explícitamente en el plan.
+**Sigue faltando**: el archivo de logo en sí. Ninguna de las dos páginas
+oficiales tiene una sección de kit de prensa/marca con un logo
+descargable — el logo existe en el sitio (renderizado en el header), pero
+tomar un recorte de pantalla del sitio como "el" archivo de logo, sin que
+el usuario confirme cuál es el archivo/formato correcto (SVG idealmente,
+o PNG con fondo transparente en buena resolución), es el tipo de decisión
+que esta revisión no toma por su cuenta — se pide explícitamente en el
+reporte final. La estructura y el copy de esta spec ya no dependen de
+nada más para poder implementarse; **el único bloqueo restante es el
+archivo de logo**.
 
 ## 2. Objetivo
 
-Comunicar la alianza estratégica con Puni Rafaela en la portada (`/`) con
-un CTA breve, y una página/apartado con más detalle, dejando **totalmente
-claro** que:
-
-- La alianza es real y autorizada (no una promesa vaga).
-- Cada comercio contrata a Puni **directamente**, no a través de ViandApp.
-- ViandApp **no administra** esa contratación, pagos, ni logística.
-- ViandApp **no garantiza** disponibilidad ni tarifas de Puni.
-
-Este último punto no es solo copy defensivo — es la misma separación de
-responsabilidades que ya rige toda la relación con Puni en la spec de
-Envíos/Adhesión: ViandApp muestra que una cocina está adherida (verificado
-por el admin), pero la relación comercial vive fuera.
+Sin cambios respecto a la versión anterior: comunicar la alianza
+estratégica con Puni Rafaela en la portada (`/`) con un CTA breve, y una
+página con más detalle, dejando totalmente claro que cada comercio
+contrata a Puni directamente y que ViandApp no administra esa
+contratación ni garantiza disponibilidad o tarifas.
 
 ## 3. Portada (`/`)
 
-Un bloque nuevo en `/` (Server Component, sección propia — no se mete
-dentro de `PortadaHero` ni de `FranjaValor`, tiene su propia identidad
-visual y su propia sección, siguiendo la convención de "no repetir la
-misma forma de sección dos veces seguidas" de `CLAUDE.md`):
+Sin cambios respecto a la versión anterior: bloque propio (Server
+Component), texto "Alianza estratégica con Puni Rafaela", logo de Puni
+(pendiente del archivo, §1), botón "Conocé más" → `/alianza-puni` (§4,
+decisión ahora cerrada), ubicado entre "Descubrí qué hay para hoy" y
+"Cocinas fundadoras".
 
-- Texto: **"Alianza estratégica con Puni Rafaela"**.
-- Logo de Puni (una vez disponible) junto al texto — con `alt` descriptivo,
-  nunca decorativo (`alt=""`) porque comunica información real.
-- Botón **"Conocé más"** → navega a la página/apartado de detalle (§4).
-- Ubicación sugerida: después de "Descubrí qué hay para hoy" y antes de
-  "Cocinas fundadoras" — ni compite con el hero (que es sobre buscar
-  comida ahora) ni se pierde al final de la página. Confirmar con el
-  usuario si prefiere otra posición al revisar el plan.
+## 4. Página de detalle — decisión cerrada: `/alianza-puni`
 
-## 4. Página/apartado de detalle
+**Cerrado en esta revisión**: ruta propia `/alianza-puni`, sumada a
+`RUTAS_RESERVADAS` (`lib/viandera/slug.ts`). Ya no es una decisión
+abierta entre ruta y anchor.
 
-Decisión de implementación pendiente de confirmar con el usuario en el
-plan: ¿ruta propia (`/alianza-puni`, sumada a `RUTAS_RESERVADAS`) o un
-apartado con anchor (`/#alianza-puni`) dentro de la portada? Ambas
-cumplen "página o apartado breve" tal como se pidió. Se recomienda **ruta
-propia**: es compartible por link directo (útil si Puni quiere linkearla
-desde su propio Instagram/WhatsApp), y no infla el peso de `/` con
-contenido que la mayoría de las visitas no necesita ver. El plan deja las
-dos opciones documentadas para que el usuario elija antes de implementar.
+Contenido:
 
-Contenido obligatorio:
-
-1. Logo de Puni + logo de ViandApp, o el texto "Alianza estratégica con
-   Puni Rafaela" con ambas marcas presentes.
-2. Explicación breve de qué es Puni (uno o dos párrafos — el texto exacto
-   depende de qué autorice Puni, no se inventa acá; ver `TODO(puni-assets)`
-   en el plan).
-3. Párrafo de transparencia, obligatorio, **sin editorializar a favor de
-   Puni ni de ViandApp** — algo en la línea de (el texto final se ajusta en
-   el plan, esto fija el contenido mínimo):
+1. Logo de Puni + logo de ViandApp (pendiente del archivo, §1), texto
+   "Alianza estratégica con Puni Rafaela".
+2. Explicación de qué es y cómo funciona Puni, con contenido real citado
+   de las fuentes oficiales de §1 — el copy puede describir, siempre en
+   los términos que las páginas oficiales realmente usan (no
+   parafraseado más allá de lo necesario para que fluya como texto de
+   ViandApp, y sin reproducir párrafos completos — ver "Copyright" en las
+   reglas generales de esta sesión, cita corta y atribuida si se usa
+   texto literal):
+   - Logística de última milla on-demand para comercios locales.
+   - Retiro inmediato o envío programado, a elección del comercio en cada
+     pedido.
+   - Asignación automática de repartidor por zona.
+   - Seguimiento del envío para comercio y repartidor.
+   - Cero comisiones sobre el producto vendido (Puni cobra por el
+     servicio de envío, no un porcentaje de la venta).
+3. Párrafo de transparencia, obligatorio, sin cambios respecto a la
+   versión anterior:
 
    > Cada comercio que se suma a ViandApp contrata el servicio de Puni de
    > forma directa e independiente. ViandApp no administra esa
@@ -98,44 +94,55 @@ Contenido obligatorio:
    > garantiza disponibilidad ni tarifas — esa información depende
    > exclusivamente de Puni.
 
-4. Botón **"Consultar servicios"** → `wa.me/<número oficial de Puni>` con
-   un mensaje prellenado neutro (ej. "Hola, vi la alianza con ViandApp y
-   quería consultar sobre sus servicios de envío") — mismo patrón de
-   `encodeURIComponent` que el resto del sitio. Abre en pestaña nueva,
-   `rel="noopener noreferrer"`.
+4. Botón **"Consultar servicios"** →
+   `https://wa.me/5493548635151?text=...` (número confirmado en §1,
+   normalizado sin espacios/guiones para el link — mismo criterio que
+   `telefonoParaWhatsapp`) con un mensaje prellenado neutro. Abre en
+   pestaña nueva, `rel="noopener noreferrer"`, `encodeURIComponent`.
 5. Mención de que las cocinas adheridas muestran la insignia "Adherido a
-   Puni" en su página — enlaza el concepto con la spec de Envíos/Adhesión
-   sin duplicar su lógica (esta página no consulta `puni_adhesiones` para
-   listar cocinas adheridas; eso ya vive en `/explorar` y en cada
-   `/{slug}`, listar acá sería una segunda fuente de la misma información
-   sin necesidad).
+   Puni" en su página — sin listarlas acá (spec de Envíos/Adhesión ya
+   resuelve dónde vive esa información).
 
 ## 5. Lo que esta página NUNCA debe decir o insinuar
 
 - Que ViandApp cobra, procesa pagos, o media económicamente entre el
   comercio y Puni.
 - Tarifas específicas de Puni (esas viven por cocina en
-  `puni_adhesiones.costo_envio_puni`, cargadas por el admin tras confirmar
-  con Puni — no un número general en esta página pública, que quedaría
-  desactualizado y sería una promesa que ViandApp no puede garantizar).
-- Cobertura geográfica de Puni como si fuera un dato de ViandApp (si Puni
-  quiere comunicar su cobertura, es contenido que Puni provee y autoriza
-  explícitamente, no algo que se redacta por inferencia).
-- Cualquier sello, certificación o "verificado" que no sea la autorización
-  real ya confirmada de uso de nombre/logo.
+  `puni_adhesiones.costo_envio_puni`, cargadas por **la vendedora** una
+  vez aprobada — corregido en la spec de Envíos/Adhesión §4 — no un
+  número general en esta página pública).
+- Cobertura geográfica de Puni como si fuera un dato de ViandApp.
+- Cualquier sello, certificación o "verificado" que no sea la
+  autorización real ya confirmada de uso de nombre/logo.
+- Nada que las fuentes oficiales de §1 no respalden — si el copy final
+  quiere afirmar algo que no está en `comoFunciona`/`queEsPuni`, se
+  vuelve a consultar con el usuario antes de publicarlo, no se
+  extrapola.
 
 ## 6. Accesibilidad y responsive
 
-Mismos criterios que el resto del sitio (WCAG 2.2 AA, contraste 4.5:1,
-objetivos táctiles ≥44px, sin scroll horizontal 375–1440px) — no se
-inventa un estándar nuevo para esta página.
+Sin cambios: WCAG 2.2 AA, contraste 4.5:1, objetivos táctiles ≥44px, sin
+scroll horizontal 375–1440px.
 
-## 7. Fuera de alcance de esta entrega
+## 7. Créditos y trazabilidad de la fuente (nuevo en esta revisión)
 
-- Listado de cocinas adheridas en esta página (ya existe la insignia por
-  cocina, ver §4).
+`public/aliados/CREDITOS-PUNI.md` (mismo patrón que
+`public/portada/CREDITOS.md`, ya existente en el proyecto para los
+créditos de las fotos del carrusel) documenta, para cada recurso usado:
+
+- **Logo**: archivo, fuente exacta (URL), fecha de obtención, y la
+  confirmación de autorización de uso (referenciando esta revisión de
+  Codex como el registro de esa autorización, ya que es la fuente de la
+  confirmación dentro de este proyecto).
+- **Copy**: las dos URLs de §1, fecha de lectura (2026-09-04), y una nota
+  de que el texto de ViandApp está inspirado/resumido a partir de esas
+  páginas, no citado palabra por palabra salvo donde se marque
+  explícitamente entre comillas.
+- **WhatsApp**: el número, y la misma fuente/fecha.
+
+## 8. Fuera de alcance de esta entrega
+
+- Listado de cocinas adheridas en esta página.
 - Cualquier flujo de auto-servicio para que un comercio "se sume a Puni"
-  desde acá — la adhesión se solicita desde `/viandera/perfil` (spec de
-  Envíos/Adhesión), esta página es informativa/pública, no un formulario.
-- Página propia con analítica conectada (la analítica general del sitio
-  sigue pausada según `CLAUDE.md`).
+  desde acá.
+- Página propia con analítica conectada.

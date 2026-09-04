@@ -358,9 +358,21 @@ adhesión administrada a Puni, y una página pública de la alianza con
 Puni Rafaela — están especificados y planificados en
 `docs/superpowers/specs/2026-09-04-*-design.md` y
 `docs/superpowers/plans/2026-09-04-*-implementation-plan.md`,
-pendientes de revisión de Codex antes de cualquier ejecución. La
-página pública de Puni está bloqueada además por falta de recursos
-reales de Puni (logo, WhatsApp oficial) — ver esa spec y su plan,
-sección de bloqueo. Orden de implementación recomendado: envíos/Puni
-→ carrito/pedidos → alianza pública (en paralelo, cuando lleguen los
-recursos) → CRM.
+pendientes de una segunda revisión de Codex antes de cualquier
+ejecución. Primera revisión de Codex (mismo día) encontró correcciones
+obligatorias ya incorporadas: creación atómica de pedidos vía función
+de Postgres con `EXECUTE` revocado a `anon`/`authenticated`, limitador
+de abuso sin guardar IP en texto plano, `puni_adhesiones` sin ninguna
+policy pública de SELECT (superficie pública servida por consulta
+server-only), el costo de "Envío mediante Puni" lo configura la
+vendedora una vez aprobada (no el admin), costo `null` deshabilita la
+modalidad en el checkout en vez de convertirse en `0`/"a coordinar",
+transiciones de estado de pedidos/adhesiones validadas por trigger,
+idempotencia en `sessionStorage` con verificación de contenido, CRM
+con tabla `crm_contacto_pedidos` (un consumidor puede tener varios
+pedidos) y alta condicionada a consentimiento de marketing, y purgado
+automático de datos del comprador vía Vercel Cron. La página pública
+de Puni recibió en esa revisión el WhatsApp oficial y las fuentes de
+contenido — solo el archivo de logo sigue pendiente. Orden de
+implementación recomendado: envíos/Puni → carrito/pedidos → alianza
+pública (en paralelo, cuando llegue el logo) → CRM.
