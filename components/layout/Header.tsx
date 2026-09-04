@@ -19,12 +19,24 @@ export default async function Header() {
           </span>
         </Link>
 
-        <nav className="flex items-center gap-4 sm:gap-6">
+        <nav aria-label="Navegación global" className="flex items-center gap-4 sm:gap-6">
+          <Link
+            href="/explorar"
+            className="hidden py-3 text-sm font-medium text-ink/70 transition-colors hover:text-ink lg:block"
+          >
+            Explorar
+          </Link>
+          <Link
+            href="/#como-funciona"
+            className="hidden py-3 text-sm font-medium text-ink/70 transition-colors hover:text-ink lg:block"
+          >
+            Cómo funciona
+          </Link>
           <Link
             href="/#sumate"
-            className="hidden py-3 text-sm font-medium text-ink/70 transition-colors hover:text-ink sm:block"
+            className="hidden py-3 text-sm font-medium text-ink/70 transition-colors hover:text-ink lg:block"
           >
-            Sumarte como viandera
+            Sumar mi cocina
           </Link>
           {user ? (
             <Link
