@@ -5,15 +5,23 @@ import Footer from "@/components/layout/Footer";
 import MotionProvider from "@/components/landing/MotionProvider";
 import "./globals.css";
 
+// Solo 600 y 700: son los únicos pesos de Baloo 2 que se usan en algún
+// componente (font-semibold / font-bold combinados con font-display en
+// todo el codebase — verificado, ningún font-medium ni font-extrabold
+// se aplica junto a font-display). 500 y 800 estaban declarados pero
+// nunca se referenciaban, así que el navegador nunca los pedía — pero
+// tenerlos en la config igual infla los @font-face que Next genera.
 const baloo = Baloo_2({
   variable: "--font-baloo",
   subsets: ["latin"],
-  weight: ["500", "600", "700", "800"],
+  weight: ["600", "700"],
 });
 
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
+  preload: false,
+  display: "swap",
 });
 
 export const metadata: Metadata = {
