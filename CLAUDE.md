@@ -350,3 +350,17 @@ Performance mediano 84 → 87 → 90 — por debajo del objetivo de LCP
 ≤2.5s pero sin regresión funcional; el resto del presupuesto (Baloo 2
 + la propia descarga de la imagen bajo throttling real) queda como
 posible trabajo futuro, no abordado en este deploy a propósito.
+
+Especificación de la próxima etapa (agregada 2026-09-04, **sin
+implementar, sin tocar Supabase**): cuatro subsistemas nuevos —
+CRM interno, carrito y pedidos por WhatsApp, configuración de envíos +
+adhesión administrada a Puni, y una página pública de la alianza con
+Puni Rafaela — están especificados y planificados en
+`docs/superpowers/specs/2026-09-04-*-design.md` y
+`docs/superpowers/plans/2026-09-04-*-implementation-plan.md`,
+pendientes de revisión de Codex antes de cualquier ejecución. La
+página pública de Puni está bloqueada además por falta de recursos
+reales de Puni (logo, WhatsApp oficial) — ver esa spec y su plan,
+sección de bloqueo. Orden de implementación recomendado: envíos/Puni
+→ carrito/pedidos → alianza pública (en paralelo, cuando lleguen los
+recursos) → CRM.
