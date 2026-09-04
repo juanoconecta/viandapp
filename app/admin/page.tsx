@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esAdmin } from "@/lib/auth/admin";
 import FormularioInvitar from "@/components/admin/FormularioInvitar";
+import TarjetaSolicitudPuni from "@/components/admin/TarjetaSolicitudPuni";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -19,6 +20,14 @@ export default async function AdminPage() {
     .from("vianderas")
     .select("id, nombre, slug, user_id, created_at")
     .order("created_at", { ascending: false });
+  const { data: adhesiones } = await admin
+    .from("puni_adhesiones")
+    .select("id, viandera_id, estado, solicitado_en, nota_admin");
+  const nombres = new Map((vianderas ?? []).map((viandera) => [viandera.id, viandera.nombre]));
+  const ordenEstado = { pendiente: 0, aprobada: 1, suspendida: 2, rechazada: 3, revocada: 4 } as const;
+  const adhesionesOrdenadas = [...(adhesiones ?? [])].sort(
+    (a, b) => ordenEstado[a.estado] - ordenEstado[b.estado],
+  );
 
   return (
     <div>
@@ -31,6 +40,24 @@ export default async function AdminPage() {
 
       <div className="mt-8">
         <FormularioInvitar />
+      </div>
+
+      <div className="mt-10">
+        <h2 className="font-display text-lg font-semibold text-ink">Solicitudes de adhesión a Puni</h2>
+        <p className="mt-1 text-sm text-ink/60">Verificá y resolvé el estado. El costo lo configura cada viandera.</p>
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {adhesionesOrdenadas.map((adhesion) => (
+            <TarjetaSolicitudPuni
+              key={adhesion.id}
+              id={adhesion.id}
+              nombre={nombres.get(adhesion.viandera_id) ?? "Cocina sin nombre"}
+              estado={adhesion.estado}
+              solicitadoEn={adhesion.solicitado_en}
+              notaAdmin={adhesion.nota_admin}
+            />
+          ))}
+          {adhesionesOrdenadas.length === 0 && <p className="text-sm text-ink/50">No hay solicitudes todavía.</p>}
+        </div>
       </div>
 
       <div className="mt-10">
