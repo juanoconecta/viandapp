@@ -81,3 +81,25 @@ export function IconCheck({ className }: { className?: string }) {
     className,
   );
 }
+
+export function IconFlechaIzquierda({ className }: { className?: string }) {
+  return base(<path d="M15 5l-7 7 7 7" />, className);
+}
+
+export function IconFlechaDerecha({ className }: { className?: string }) {
+  return base(<path d="M9 5l7 7-7 7" />, className);
+}
+
+export function IconPausa({ className }: { className?: string }) {
+  return base(
+    <>
+      <path d="M8 5v14" />
+      <path d="M16 5v14" />
+    </>,
+    className,
+  );
+}
+
+export function IconReproducir({ className }: { className?: string }) {
+  return base(<path d="M7 4.5v15l13-7.5-13-7.5Z" strokeLinejoin="round" />, className);
+}
