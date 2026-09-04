@@ -23,6 +23,28 @@ export type Viandera = {
   barrio: string | null;
   ofrece_retiro: boolean;
   ofrece_envio: boolean;
+  costo_envio_propio: number | null;
+  cobertura_envio: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EstadoAdhesionPuni =
+  | "pendiente"
+  | "aprobada"
+  | "rechazada"
+  | "suspendida"
+  | "revocada";
+
+export type PuniAdhesion = {
+  id: string;
+  viandera_id: string;
+  estado: EstadoAdhesionPuni;
+  costo_envio_puni: number | null;
+  solicitado_en: string;
+  resuelto_en: string | null;
+  resuelto_por: string | null;
+  nota_admin: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -76,10 +98,53 @@ export type Database = {
         Row: Viandera;
         Insert: Omit<
           Viandera,
-          "id" | "created_at" | "updated_at" | "barrio" | "ofrece_retiro" | "ofrece_envio"
+          | "id"
+          | "created_at"
+          | "updated_at"
+          | "barrio"
+          | "ofrece_retiro"
+          | "ofrece_envio"
+          | "costo_envio_propio"
+          | "cobertura_envio"
         > &
-          Partial<Pick<Viandera, "barrio" | "ofrece_retiro" | "ofrece_envio">>;
+          Partial<
+            Pick<
+              Viandera,
+              | "barrio"
+              | "ofrece_retiro"
+              | "ofrece_envio"
+              | "costo_envio_propio"
+              | "cobertura_envio"
+            >
+          >;
         Update: Partial<Omit<Viandera, "id" | "created_at" | "updated_at">>;
+        Relationships: [];
+      };
+      puni_adhesiones: {
+        Row: PuniAdhesion;
+        Insert: Omit<
+          PuniAdhesion,
+          | "id"
+          | "created_at"
+          | "updated_at"
+          | "solicitado_en"
+          | "estado"
+          | "costo_envio_puni"
+          | "resuelto_en"
+          | "resuelto_por"
+          | "nota_admin"
+        > &
+          Partial<
+            Pick<
+              PuniAdhesion,
+              | "estado"
+              | "costo_envio_puni"
+              | "resuelto_en"
+              | "resuelto_por"
+              | "nota_admin"
+            >
+          >;
+        Update: Partial<Omit<PuniAdhesion, "id" | "created_at" | "updated_at">>;
         Relationships: [];
       };
       viandas: {

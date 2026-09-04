@@ -13,6 +13,10 @@ type Props = {
   telefonoInicial: string;
   latInicial: number | null;
   lngInicial: number | null;
+  ofreceRetiroInicial: boolean;
+  ofreceEnvioInicial: boolean;
+  costoEnvioPropioInicial: number | null;
+  coberturaEnvioInicial: string;
 };
 
 export default function FormularioPerfil({
@@ -22,6 +26,10 @@ export default function FormularioPerfil({
   telefonoInicial,
   latInicial,
   lngInicial,
+  ofreceRetiroInicial,
+  ofreceEnvioInicial,
+  costoEnvioPropioInicial,
+  coberturaEnvioInicial,
 }: Props) {
   const [estado, formAction] = useActionState<EstadoPerfil, FormData>(
     actualizarPerfil,
@@ -31,6 +39,7 @@ export default function FormularioPerfil({
     lat: latInicial,
     lng: lngInicial,
   });
+  const [ofreceEnvio, setOfreceEnvio] = useState(ofreceEnvioInicial);
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
@@ -51,6 +60,65 @@ export default function FormularioPerfil({
           className={campoClase}
         />
       </div>
+
+      <fieldset className="mt-2 flex flex-col gap-4 rounded-2xl border border-ink/10 p-4">
+        <legend className="px-1 font-display text-lg font-bold text-ink">Entregas</legend>
+        <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-medium text-ink/80">
+          <input
+            name="ofrece_retiro"
+            type="checkbox"
+            defaultChecked={ofreceRetiroInicial}
+            className="size-5 accent-coral"
+          />
+          Ofrezco retiro por mi cocina
+        </label>
+        <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-medium text-ink/80">
+          <input
+            name="ofrece_envio"
+            type="checkbox"
+            checked={ofreceEnvio}
+            onChange={(event) => setOfreceEnvio(event.target.checked)}
+            className="size-5 accent-coral"
+          />
+          Ofrezco envío propio
+        </label>
+        {ofreceEnvio && (
+          <div className="flex flex-col gap-4 border-l-2 border-coral/25 pl-4">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="costo_envio_propio" className="text-sm font-medium text-ink/80">
+                Costo de envío
+              </label>
+              <input
+                id="costo_envio_propio"
+                name="costo_envio_propio"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                defaultValue={costoEnvioPropioInicial ?? ""}
+                className={campoClase}
+              />
+              <p className="text-xs text-ink/55">
+                Si queda vacío, esta modalidad no aparecerá en el carrito.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="cobertura_envio" className="text-sm font-medium text-ink/80">
+                Zona de cobertura
+              </label>
+              <textarea
+                id="cobertura_envio"
+                name="cobertura_envio"
+                rows={2}
+                maxLength={500}
+                defaultValue={coberturaEnvioInicial}
+                className={`${campoClase} resize-none`}
+                placeholder="Barrios o radio en los que entregás"
+              />
+            </div>
+          </div>
+        )}
+      </fieldset>
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="bio" className="text-sm font-medium text-ink/80">

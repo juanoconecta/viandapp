@@ -1,3 +1,5 @@
+import { IconPuni } from "@/components/landing/icons";
+
 function modalidadTexto(ofreceRetiro: boolean, ofreceEnvio: boolean): string {
   if (ofreceRetiro && ofreceEnvio) return "Retiro y envío";
   if (ofreceRetiro) return "Retiro";
@@ -30,6 +32,7 @@ export default function StorefrontHeader({
   ofreceRetiro,
   ofreceEnvio,
   actualizadoEn,
+  adheridaAPuni,
 }: {
   nombre: string;
   bio: string | null;
@@ -37,6 +40,7 @@ export default function StorefrontHeader({
   ofreceRetiro: boolean;
   ofreceEnvio: boolean;
   actualizadoEn: string;
+  adheridaAPuni: boolean;
 }) {
   const iniciales = nombre
     .split(" ")
@@ -67,6 +71,12 @@ export default function StorefrontHeader({
             {modalidad && <span>{modalidad}</span>}
             {fecha && <span>Actualizado el {fecha}</span>}
           </p>
+        )}
+        {adheridaAPuni && (
+          <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-1 text-[11px] font-semibold text-white">
+            <IconPuni className="size-3.5" />
+            Adherido a Puni
+          </span>
         )}
       </div>
     </header>

@@ -4,6 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  obtenerAdhesionPropia,
+  type EstadoAdhesionVendedora,
+} from "@/lib/envios/adhesionPropia";
+import { transicionValida } from "@/lib/envios/transiciones";
 import { pathDesdeFotoUrl } from "@/lib/viandera/storage";
 import { generarSlugDisponible, normalizarSlug, esSlugReservado } from "@/lib/viandera/slug";
 import { ETIQUETAS_DIETARIAS } from "@/lib/viandera/etiquetas";
@@ -62,9 +68,17 @@ export async function actualizarPerfil(
   const slugDeseado = String(formData.get("slug") ?? "").trim().slice(0, 60);
   const latRaw = String(formData.get("lat") ?? "");
   const lngRaw = String(formData.get("lng") ?? "");
+  const ofreceRetiro = formData.get("ofrece_retiro") === "on";
+  const ofreceEnvio = formData.get("ofrece_envio") === "on";
+  const costoEnvioRaw = String(formData.get("costo_envio_propio") ?? "").trim();
+  const costoEnvio = costoEnvioRaw ? Number(costoEnvioRaw) : null;
+  const coberturaEnvio = String(formData.get("cobertura_envio") ?? "").trim().slice(0, 500);
 
   if (!nombre) {
     return { status: "error", mensaje: "El nombre no puede estar vacío." };
+  }
+  if (costoEnvio !== null && (!Number.isFinite(costoEnvio) || costoEnvio < 0)) {
+    return { status: "error", mensaje: "El costo de envío no es válido." };
   }
 
   const supabase = await createClient();
@@ -108,6 +122,10 @@ export async function actualizarPerfil(
       slug,
       lat: latRaw ? Number(latRaw) : null,
       lng: lngRaw ? Number(lngRaw) : null,
+      ofrece_retiro: ofreceRetiro,
+      ofrece_envio: ofreceEnvio,
+      costo_envio_propio: ofreceEnvio ? costoEnvio : null,
+      cobertura_envio: ofreceEnvio ? coberturaEnvio || null : null,
     })
     .eq("id", vianderaId);
 
@@ -124,6 +142,106 @@ export async function actualizarPerfil(
     };
   }
 
+  revalidatePath("/viandera/perfil");
+  return { status: "ok" };
+}
+
+async function resolverVianderaPropia(): Promise<
+  { ok: true; vianderaId: string } | { ok: false; mensaje: string }
+> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, mensaje: "No autenticado." };
+
+  const { data: viandera } = await supabase
+    .from("vianderas")
+    .select("id")
+    .eq("user_id", user.id)
+    .single();
+  if (!viandera) return { ok: false, mensaje: "No encontramos tu cocina." };
+
+  return { ok: true, vianderaId: viandera.id };
+}
+
+export async function obtenerEstadoAdhesionPropia(): Promise<EstadoAdhesionVendedora | null> {
+  const propia = await resolverVianderaPropia();
+  if (!propia.ok) return null;
+  return obtenerAdhesionPropia(propia.vianderaId);
+}
+
+export type ResultadoSolicitudAdhesion =
+  | { status: "idle" }
+  | { status: "error"; mensaje: string }
+  | { status: "ok" };
+
+export async function solicitarAdhesionPuni(
+  _prevState: ResultadoSolicitudAdhesion,
+  _formData: FormData,
+): Promise<ResultadoSolicitudAdhesion> {
+  void _prevState;
+  void _formData;
+  const propia = await resolverVianderaPropia();
+  if (!propia.ok) return { status: "error", mensaje: propia.mensaje };
+
+  const existente = await obtenerAdhesionPropia(propia.vianderaId);
+  if (!existente) {
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from("puni_adhesiones")
+      .insert({ viandera_id: propia.vianderaId, estado: "pendiente" });
+    if (error) return { status: "error", mensaje: "No pudimos enviar la solicitud." };
+    revalidatePath("/viandera/perfil");
+    return { status: "ok" };
+  }
+
+  if (!transicionValida(existente.estado, "pendiente", "viandera")) {
+    return {
+      status: "error",
+      mensaje: "No podés volver a solicitar desde el estado actual.",
+    };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("puni_adhesiones")
+    .update({ estado: "pendiente" })
+    .eq("viandera_id", propia.vianderaId);
+  if (error) return { status: "error", mensaje: "No pudimos reenviar la solicitud." };
+  revalidatePath("/viandera/perfil");
+  return { status: "ok" };
+}
+
+export type ResultadoActualizarCostoPuni =
+  | { status: "idle" }
+  | { status: "error"; mensaje: string }
+  | { status: "ok" };
+
+export async function actualizarCostoEnvioPuni(
+  _prevState: ResultadoActualizarCostoPuni,
+  formData: FormData,
+): Promise<ResultadoActualizarCostoPuni> {
+  const propia = await resolverVianderaPropia();
+  if (!propia.ok) return { status: "error", mensaje: propia.mensaje };
+
+  const actual = await obtenerAdhesionPropia(propia.vianderaId);
+  if (actual?.estado !== "aprobada") {
+    return { status: "error", mensaje: "Tu adhesión todavía no está aprobada." };
+  }
+
+  const costoRaw = String(formData.get("costoEnvioPuni") ?? "").trim();
+  const costo = costoRaw ? Number(costoRaw) : null;
+  if (costo !== null && (!Number.isFinite(costo) || costo < 0)) {
+    return { status: "error", mensaje: "Costo inválido." };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("puni_adhesiones")
+    .update({ costo_envio_puni: costo })
+    .eq("viandera_id", propia.vianderaId);
+  if (error) return { status: "error", mensaje: "No pudimos guardar el costo." };
   revalidatePath("/viandera/perfil");
   return { status: "ok" };
 }

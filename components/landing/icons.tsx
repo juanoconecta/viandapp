@@ -82,6 +82,19 @@ export function IconCheck({ className }: { className?: string }) {
   );
 }
 
+export function IconPuni({ className }: { className?: string }) {
+  return base(
+    <>
+      <path d="M4 16.5V9.8l8-4.3 8 4.3v6.7" />
+      <path d="M7.5 13.5h9" />
+      <circle cx="8" cy="17.5" r="1.8" />
+      <circle cx="16" cy="17.5" r="1.8" />
+      <path d="M12 5.5v8" />
+    </>,
+    className,
+  );
+}
+
 export function IconFlechaIzquierda({ className }: { className?: string }) {
   return base(<path d="M15 5l-7 7 7 7" />, className);
 }

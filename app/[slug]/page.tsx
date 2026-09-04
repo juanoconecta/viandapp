@@ -9,6 +9,7 @@ import PublicDishCard, {
 } from "@/components/storefront/PublicDishCard";
 import StickyContactBar from "@/components/storefront/StickyContactBar";
 import WhatsAppIntent from "@/components/storefront/WhatsAppIntent";
+import { adhesionesAprobadas } from "@/lib/envios/adhesionPublica";
 
 export async function generateMetadata({
   params,
@@ -28,7 +29,6 @@ export async function generateMetadata({
   if (!viandera || !viandera.activo) {
     return { title: "ViandApp" };
   }
-
   return {
     title: `${viandera.nombre} — ViandApp`,
     description:
@@ -71,6 +71,7 @@ export default async function VianderaPublicaPage({
   if (!viandera || !viandera.activo) {
     notFound();
   }
+  const adhesionPuni = (await adhesionesAprobadas([viandera.id])).has(viandera.id);
 
   const { data: platosCrudos, error: errorPlatos } = await supabase
     .from("viandas")
@@ -125,6 +126,7 @@ export default async function VianderaPublicaPage({
             ofreceRetiro={viandera.ofrece_retiro}
             ofreceEnvio={viandera.ofrece_envio}
             actualizadoEn={viandera.updated_at}
+            adheridaAPuni={adhesionPuni}
           />
 
           {platos.length === 0 ? (

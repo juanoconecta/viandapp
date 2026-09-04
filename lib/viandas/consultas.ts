@@ -1,6 +1,7 @@
 import { createClient } from "../supabase/server";
 import type { TipoVianda } from "../../types";
 import type { FiltrosExplorador } from "./filtros";
+import { adhesionesAprobadas } from "../envios/adhesionPublica";
 
 export type ResultadoPlato = {
   id: string;
@@ -16,6 +17,8 @@ export type ResultadoPlato = {
     barrio: string | null;
     ofreceRetiro: boolean;
     ofreceEnvio: boolean;
+    adheridaAPuni: boolean;
+    costoEnvioPuni: number | null;
   };
 };
 
@@ -100,6 +103,7 @@ export async function buscarPlatos(
   }
 
   const vianderasPorId = new Map(vianderas.map((v) => [v.id, v]));
+  const adhesiones = await adhesionesAprobadas(vianderas.map((v) => v.id));
 
   let consultaViandas = supabase
     .from("viandas")
@@ -142,6 +146,7 @@ export async function buscarPlatos(
   return (viandas ?? []).flatMap((plato) => {
     const viandera = vianderasPorId.get(plato.vianderas_id);
     if (!viandera) return [];
+    const adhesion = adhesiones.get(plato.vianderas_id);
 
     return [
       {
@@ -158,6 +163,8 @@ export async function buscarPlatos(
           barrio: viandera.barrio,
           ofreceRetiro: viandera.ofrece_retiro,
           ofreceEnvio: viandera.ofrece_envio,
+          adheridaAPuni: Boolean(adhesion),
+          costoEnvioPuni: adhesion?.costo_envio_puni ?? null,
         },
       },
     ];
