@@ -6,8 +6,22 @@ import { FOTOS_CARRUSEL } from "./carruselDatos";
 export default function PortadaHero() {
   return (
     <section className="bg-teal">
-      <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-8 px-4 py-12 sm:px-6 lg:grid-cols-2 lg:gap-12 lg:py-20">
-        <div className="flex flex-col gap-5">
+      {/*
+        Tres composiciones según ancho, no dos:
+        - < md (mobile): apilado, una columna — grid-cols-1 por defecto.
+        - md–lg (768–1023): dos columnas compactas y contenidas (mismo
+          contenedor con `max-w-6xl`, gap y padding que el resto del
+          sitio) — evita texto comprimido sin llegar todavía al layout
+          a sangre.
+        - >= lg (1024): el hero se vuelve una sola composición
+          horizontal a sangre — se cancelan `mx-auto`/`max-w-6xl`/
+          padding/gap del contenedor (`lg:mx-0 lg:max-w-none lg:gap-0
+          lg:px-0 lg:py-0`) para que la columna derecha (la foto) llegue
+          hasta el borde real de la sección, sin ningún gap visual entre
+          las dos mitades.
+      */}
+      <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-8 px-4 py-12 sm:px-6 md:grid-cols-2 md:gap-10 md:py-16 lg:mx-0 lg:max-w-none lg:items-stretch lg:gap-0 lg:px-0 lg:py-0">
+        <div className="flex flex-col gap-5 lg:justify-center lg:py-16 lg:pl-[max(1.5rem,calc((100vw-72rem)/2+1.5rem))] lg:pr-12">
           <p className="font-display text-sm font-semibold uppercase tracking-wide text-white/70">
             Rafaela, Santa Fe
           </p>

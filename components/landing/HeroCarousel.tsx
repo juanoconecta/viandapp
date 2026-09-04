@@ -136,7 +136,7 @@ export default function HeroCarousel({ fotos }: { fotos: FotoCarrusel[] }) {
       role="region"
       aria-roledescription="carrusel"
       aria-label="Fotos destacadas de ViandApp"
-      className="relative aspect-[3/4] w-full overflow-hidden rounded-3xl bg-soft-teal lg:aspect-[16/11]"
+      className="relative aspect-[3/4] w-full overflow-hidden rounded-3xl bg-soft-teal md:aspect-[4/3] lg:aspect-auto lg:h-full lg:rounded-none lg:[clip-path:polygon(6%_0,100%_0,100%_100%,0%_100%)]"
       onMouseEnter={() => dispatch({ tipo: "INTERACCION_INICIO" })}
       onMouseLeave={() => dispatch({ tipo: "INTERACCION_FIN" })}
       onFocus={() => dispatch({ tipo: "INTERACCION_INICIO" })}
@@ -176,7 +176,16 @@ export default function HeroCarousel({ fotos }: { fotos: FotoCarrusel[] }) {
               />
             )}
             {foto.esIlustrativa && !fallidas.has(i) && (
-              <span className="absolute bottom-3 right-3 rounded-full bg-ink/60 px-3 py-1 text-xs font-medium text-white">
+              // Apilado arriba de los indicadores, nunca compartiendo fila
+              // con otro control — ese fue el error de las dos posiciones
+              // anteriores: abajo-derecha choca con los indicadores
+              // (abajo-izquierda) a 320 px, y arriba-izquierda choca con
+              // el botón "Pausar/Reanudar presentación" (arriba-derecha)
+              // al mismo ancho. `bottom-14` (56 px) deja a los
+              // indicadores (44 px + 4 px de margen) su fila completa,
+              // sin superponerse a nada — mismo lugar en todos los
+              // anchos, sin necesitar overrides por breakpoint.
+              <span className="absolute bottom-14 left-3 rounded-full bg-ink/60 px-3 py-1 text-xs font-medium text-white">
                 Imagen ilustrativa
               </span>
             )}
@@ -201,7 +210,7 @@ export default function HeroCarousel({ fotos }: { fotos: FotoCarrusel[] }) {
         <IconFlechaDerecha className="h-5 w-5" />
       </button>
 
-      <div className="absolute bottom-3 left-3 flex items-center gap-2">
+      <div className="absolute bottom-1 left-1 flex items-center">
         {fotos.map((foto, i) => (
           <button
             key={foto.src}
@@ -209,10 +218,19 @@ export default function HeroCarousel({ fotos }: { fotos: FotoCarrusel[] }) {
             aria-label={`Ir a imagen ${i + 1}`}
             aria-current={i === indiceVisible ? "true" : undefined}
             onClick={() => dispatch({ tipo: "IR_A", indice: i })}
-            className={`h-11 w-11 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
-              i === indiceVisible ? "bg-white" : "bg-white/40"
-            }`}
-          />
+            className="flex h-11 w-11 items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          >
+            {/* El botón mide 44×44 (objetivo táctil); el punto visible
+                adentro es chico a propósito (~9 px) para no pintar todo
+                el botón como un círculo blanco sólido. El anillo oscuro
+                sutil (`shadow`) mantiene el punto legible incluso sobre
+                zonas claras de la foto, donde blanco puro se perdería. */}
+            <span
+              className={`h-[9px] w-[9px] rounded-full shadow-[0_0_0_1px_rgba(0,0,0,0.35)] ${
+                i === indiceVisible ? "bg-white" : "bg-white/70"
+              }`}
+            />
+          </button>
         ))}
       </div>
 
