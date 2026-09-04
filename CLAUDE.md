@@ -320,3 +320,19 @@ confirmar a mano en el Dashboard qué plan tiene el proyecto y que exista
 un backup restaurable; si no lo hay, hacer un dump lógico manual antes de
 tocar nada. Detalle completo del procedimiento (preflight, transacción,
 checklist de salida y rollback) en la Task 8 del plan del explorador.
+
+Portada comercial (agregada 2026-09-03, tras el lanzamiento del
+explorador): `/` deja de ser una landing 100% orientada a captar
+vianderas — pasa a ser consumidor-first, con el mensaje "Hoy no
+cocines. Elegí casero.", buscador y filtros rápidos hacia
+`/explorar`, un carrusel fotográfico de imágenes locales
+(`public/portada/`, créditos en `public/portada/CREDITOS.md`) y una
+sección "Descubrí qué hay para hoy" alimentada con `buscarPlatos`
+real. La captación de cocinas sigue existiendo — sección "Cocinas
+fundadoras" más abajo en la misma página, reutilizando sin cambios el
+formulario y la Server Action que ya insertaban en
+`interesados_viandera`. El header global ahora tiene `aria-label`
+distinto de `MobileBottomNav` (`"Navegación global"` vs "Navegación
+principal móvil"). Sin mapa, analítica conectada ni cambios de
+Supabase en esta entrega — ver
+`docs/superpowers/specs/2026-09-03-viandapp-portada-comercial-design.md`.
