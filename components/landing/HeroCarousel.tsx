@@ -66,17 +66,27 @@ export default function HeroCarousel({ fotos }: { fotos: FotoCarrusel[] }) {
   }, []);
 
   // Precarga como máximo una imagen por delante del ciclo — nunca las
-  // cuatro. El estado inicial ya cubre 0 (visible) + 1 (siguiente); acá
-  // se calcula durante el render (no en un efecto — evita el "cascading
-  // render" que marca `react-hooks/set-state-in-effect`, siguiendo el
-  // patrón oficial de React para derivar estado a partir de otro
-  // estado): si la imagen siguiente al índice actual todavía no está en
-  // `montadas`, se agrega. La propia condición `!montadas.has(proxima)`
-  // se vuelve falsa apenas se agrega, así que no reintenta en cada
-  // render — solo cuando `estado.indice` avanza a una posición nueva.
+  // cuatro. Acá se calcula durante el render (no en un efecto — evita
+  // el "cascading render" que marca `react-hooks/set-state-in-effect`,
+  // siguiendo el patrón oficial de React para derivar estado a partir
+  // de otro estado). Dos cosas deben estar en `montadas`, no solo una:
+  // (1) el índice actual — ANTERIOR/IR_A pueden saltar directo a una
+  // posición que el ciclo de precarga hacia adelante todavía no había
+  // tocado (ej. tocar "Anterior" desde el índice 0 salta al último sin
+  // pasar por los intermedios); sin este chequeo esa imagen nunca se
+  // monta y el crossfade queda trabado indefinidamente en la anterior.
+  // (2) la siguiente del ciclo, para mantener la precarga de una por
+  // delante durante la rotación automática. Ambas altas se aplican en
+  // un único `setMontadas`, y la condición que las guarda se vuelve
+  // falsa apenas se cumple, así que no reintenta en cada render.
   const proximaAPrecargar = siguienteIndice(estado.indice, fotos.length);
-  if (!montadas.has(proximaAPrecargar)) {
-    setMontadas(new Set(montadas).add(proximaAPrecargar));
+  const faltaIndiceActual = !montadas.has(estado.indice);
+  const faltaProxima = !montadas.has(proximaAPrecargar);
+  if (faltaIndiceActual || faltaProxima) {
+    const nuevasMontadas = new Set(montadas);
+    if (faltaIndiceActual) nuevasMontadas.add(estado.indice);
+    if (faltaProxima) nuevasMontadas.add(proximaAPrecargar);
+    setMontadas(nuevasMontadas);
   }
 
   // El crossfade visual espera a que la imagen destino esté lista —
