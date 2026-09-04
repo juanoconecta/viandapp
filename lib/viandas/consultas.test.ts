@@ -3,8 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../supabase/server", () => ({
   createClient: vi.fn(),
 }));
+vi.mock("../envios/adhesionPublica", () => ({
+  adhesionesAprobadas: vi.fn(),
+}));
 
 import { createClient } from "../supabase/server";
+import { adhesionesAprobadas } from "../envios/adhesionPublica";
 import {
   buscarPlatos,
   escaparIlike,
@@ -13,6 +17,7 @@ import {
 import type { FiltrosExplorador } from "./filtros";
 
 const mockedCreateClient = vi.mocked(createClient);
+const mockedAdhesionesAprobadas = vi.mocked(adhesionesAprobadas);
 
 const FILTROS_BASE: FiltrosExplorador = {
   q: "",
@@ -154,6 +159,8 @@ describe("tiposParaFiltro", () => {
 describe("buscarPlatos", () => {
   beforeEach(() => {
     mockedCreateClient.mockReset();
+    mockedAdhesionesAprobadas.mockReset();
+    mockedAdhesionesAprobadas.mockResolvedValue(new Map());
   });
 
   it("devuelve los platos mapeados cuando ambas consultas resuelven bien", async () => {
@@ -179,9 +186,26 @@ describe("buscarPlatos", () => {
           barrio: "Centro",
           ofreceRetiro: true,
           ofreceEnvio: false,
+          adheridaAPuni: false,
+          costoEnvioPuni: null,
         },
       },
     ]);
+  });
+
+  it("marca Puni solo cuando existe una adhesion aprobada para la viandera", async () => {
+    mockearSupabase({
+      vianderas: { data: [VIANDERA_FILA], error: null },
+      viandas: { data: [PLATO_FILA], error: null },
+    });
+    mockedAdhesionesAprobadas.mockResolvedValue(
+      new Map([["v1", { viandera_id: "v1", costo_envio_puni: 850 }]]),
+    );
+
+    const [resultado] = await buscarPlatos(FILTROS_BASE);
+
+    expect(resultado.viandera.adheridaAPuni).toBe(true);
+    expect(resultado.viandera.costoEnvioPuni).toBe(850);
   });
 
   it("devuelve [] cuando no hay vianderas activas — resultado vacío legítimo", async () => {

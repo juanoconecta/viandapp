@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ResultadoPlato } from "@/lib/viandas/consultas";
 import { ETIQUETAS_DIETARIAS } from "@/lib/viandera/etiquetas";
+import { IconPuni } from "@/components/landing/icons";
 
 const TIPO_ETIQUETA: Record<string, string> = {
   almuerzo: "Almuerzo",
@@ -46,6 +47,12 @@ export default function DishCard({ plato }: { plato: ResultadoPlato }) {
           {plato.viandera.nombre}
           {plato.viandera.barrio ? ` · ${plato.viandera.barrio}` : ""}
         </p>
+        {plato.viandera.adheridaAPuni && (
+          <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-soft-teal px-2 py-1 text-[10px] font-semibold text-teal">
+            <IconPuni className="size-3" />
+            Adherido a Puni
+          </span>
+        )}
         <p className="text-xs text-ink-muted">
           {TIPO_ETIQUETA[plato.tipo] ?? plato.tipo}
           {modalidad ? ` · ${modalidad}` : ""}

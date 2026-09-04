@@ -17,6 +17,8 @@ function platoFalso(id: string): ResultadoPlato {
       barrio: null,
       ofreceRetiro: true,
       ofreceEnvio: false,
+      adheridaAPuni: false,
+      costoEnvioPuni: null,
     },
   };
 }
