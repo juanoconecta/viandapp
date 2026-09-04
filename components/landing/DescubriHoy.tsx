@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { JSX } from "react";
 import DishCard from "@/components/consumer/DishCard";
+import { IconPlato } from "@/components/landing/icons";
 import { buscarPlatos } from "@/lib/viandas/consultas";
 import { clasificarDestacados } from "@/lib/viandas/destacados";
 
@@ -27,7 +28,7 @@ export default async function DescubriHoy(): Promise<JSX.Element> {
 
   if (resultado.estado === "error") {
     return (
-      <section className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
+      <section className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6">
         <h2 className="font-display text-3xl font-bold text-ink">
           Descubrí qué hay para hoy
         </h2>
@@ -44,7 +45,7 @@ export default async function DescubriHoy(): Promise<JSX.Element> {
   }
 
   return (
-    <section className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
+    <section className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6">
       <h2 className="font-display text-3xl font-bold text-ink">
         Descubrí qué hay para hoy
       </h2>
@@ -54,17 +55,22 @@ export default async function DescubriHoy(): Promise<JSX.Element> {
       </p>
 
       {resultado.estado === "vacio" ? (
-        <div className="mt-8 flex flex-col items-center gap-3 rounded-2xl border border-dashed border-line px-6 py-16 text-center">
-          <p className="text-lg font-medium text-ink">
-            Todavía estamos sumando las primeras cocinas de Rafaela.
+        <div className="mt-6 flex flex-col items-center gap-2 rounded-2xl border border-line bg-card px-6 py-6 text-center">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-soft-coral">
+            <IconPlato className="h-5 w-5 text-coral" />
+          </span>
+          <p className="font-medium text-ink">
+            Estamos sumando las primeras cocinas de Rafaela.
           </p>
-          <p className="max-w-md text-sm text-ink-muted">
-            ¿Cocinás vos?{" "}
-            <Link href="/#sumate" className="font-medium text-coral-600 underline-offset-2 hover:underline">
-              Sumate más abajo
-            </Link>
-            .
+          <p className="text-sm text-ink-muted">
+            ¿Cocinás? Podés ser de las primeras en aparecer.
           </p>
+          <Link
+            href="/#sumate"
+            className="mt-2 flex min-h-[44px] items-center rounded-full bg-coral-600 px-6 text-sm font-medium text-white transition-colors hover:bg-coral-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral-600"
+          >
+            Sumar mi cocina
+          </Link>
         </div>
       ) : (
         <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

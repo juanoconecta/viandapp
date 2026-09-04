@@ -18,7 +18,7 @@ const PASOS_CONSUMIDOR = [
 
 export default function RecorridoConsumidor() {
   return (
-    <section id="como-funciona" className="mx-auto w-full max-w-5xl scroll-mt-20 px-4 py-20 sm:px-6">
+    <section id="como-funciona" className="mx-auto w-full max-w-5xl scroll-mt-20 px-4 py-14 sm:px-6">
       <h2 className="text-center font-display text-3xl font-bold text-ink">
         ¿Cómo funciona?
       </h2>
