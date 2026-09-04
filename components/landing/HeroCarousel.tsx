@@ -34,9 +34,7 @@ export default function HeroCarousel({ fotos }: { fotos: FotoCarrusel[] }) {
   // terminaron de resolver, con éxito o con error. El crossfade
   // visual espera a que el destino esté en uno de esos dos últimos
   // sets antes de mostrarlo — ver `indiceVisible` más abajo.
-  const [montadas, setMontadas] = useState<Set<number>>(
-    () => new Set([0, siguienteIndice(0, fotos.length)]),
-  );
+  const [montadas, setMontadas] = useState<Set<number>>(() => new Set([0]));
   const [cargadas, setCargadas] = useState<Set<number>>(() => new Set());
   const [fallidas, setFallidas] = useState<Set<number>>(() => new Set());
   // Índice que realmente se muestra (opacidad 1) — deliberadamente
@@ -76,12 +74,21 @@ export default function HeroCarousel({ fotos }: { fotos: FotoCarrusel[] }) {
   // pasar por los intermedios); sin este chequeo esa imagen nunca se
   // monta y el crossfade queda trabado indefinidamente en la anterior.
   // (2) la siguiente del ciclo, para mantener la precarga de una por
-  // delante durante la rotación automática. Ambas altas se aplican en
-  // un único `setMontadas`, y la condición que las guarda se vuelve
-  // falsa apenas se cumple, así que no reintenta en cada render.
+  // delante durante la rotación automática — pero solo una vez que la
+  // imagen actual ya resolvió (cargada o fallida). Medido con
+  // Lighthouse: montar la siguiente desde el primer render hacía que
+  // compitiera por ancho de banda con la imagen LCP durante su propia
+  // descarga (ambas peticiones arrancaban casi juntas, "High" prioridad
+  // las dos) — con 6s de rotación automática sobra tiempo para
+  // precargarla después de que la visible termine. Ambas altas se
+  // aplican en un único `setMontadas`, y la condición que las guarda se
+  // vuelve falsa apenas se cumple, así que no reintenta en cada render.
   const proximaAPrecargar = siguienteIndice(estado.indice, fotos.length);
+  const indiceActualResuelto =
+    cargadas.has(estado.indice) || fallidas.has(estado.indice);
   const faltaIndiceActual = !montadas.has(estado.indice);
-  const faltaProxima = !montadas.has(proximaAPrecargar);
+  const faltaProxima =
+    indiceActualResuelto && !montadas.has(proximaAPrecargar);
   if (faltaIndiceActual || faltaProxima) {
     const nuevasMontadas = new Set(montadas);
     if (faltaIndiceActual) nuevasMontadas.add(estado.indice);
