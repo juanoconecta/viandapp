@@ -4,145 +4,141 @@
 > `superpowers:subagent-driven-development` (recomendado) o
 > `superpowers:executing-plans`. Los pasos usan sintaxis de checkbox.
 
-**Revisión correctiva 2026-09-04** sobre el commit `4196de3` (ver reporte
-de esa revisión): pedido atómico vía función de Postgres (Task 1, Task 3),
-limitador de abuso (Task 1, Task 3 nueva sub-tarea), `idempotency_key` en
-`sessionStorage` con verificación de contenido (Task 5), costo `null`
-deshabilita la modalidad — nunca se convierte en `0`/"a coordinar" (Task 2,
-Task 3), transiciones de `pedidos.estado` validadas por trigger + Server
-Action (Task 1, Task 6), retención automática vía Vercel Cron (Task 7),
-cobertura de TDD ampliada (Task 8, nueva). Se introduce por primera vez en
-este proyecto una capa de **tests de integración contra Postgres real**
-(ver Task 0) — hasta ahora todos los tests del repo son funciones puras
-sin I/O.
+**Segunda revisión correctiva 2026-09-04** sobre el commit `2ee4acc`:
+`crear_pedido_atomico` bloquea y revalida `viandas` **dentro** de la
+transacción (Task 1) en vez de confiar en una lectura previa;
+`request_hash` canónico para idempotencia concurrente (Task 1, Task 3);
+`GRANT`/`REVOKE ... ON FUNCTION` con firma completa de argumentos
+(Task 1); `calcularTotal` corregido para rechazar `null`/`NaN`/
+`Infinity` en runtime (Task 2); limitador de abuso con HMAC real, sesión
+server-emitida como señal secundaria (nunca frontera de seguridad), y
+límite global convertido en circuito de emergencia de umbral alto
+(Task 1, Task 3); cron falla cerrado y comparte servicio de purgado con
+la limpieza del limitador (Task 7); Task 0 ofrece dos caminos concretos
+para la infraestructura de integración porque **esta máquina no tiene
+Docker Desktop instalado** (verificado); 12 tests de integración nuevos
+(Task 8, nueva).
 
-**Objetivo:** carrito de una sola cocina (client-side), confirmación con
-revalidación server-side de precio/disponibilidad, pedido creado
-atómicamente con captura inmutable, generación de mensaje de WhatsApp, sin
-pagos online.
+**Objetivo:** carrito de una sola cocina (client-side), pedido creado
+atómicamente con revalidación bloqueante dentro de la misma transacción,
+captura inmutable, generación de mensaje de WhatsApp, sin pagos online.
 
-**Arquitectura:** `localStorage` para el carrito pre-confirmación (sin
-tabla en la base). Una función transaccional de Postgres
-(`crear_pedido_atomico`) crea `pedidos`+`pedido_items` en una sola
-transacción, invocable únicamente por `service_role`. Un limitador de
-abuso (tabla de contadores por ventana) antes de cualquier escritura.
-`idempotency_key` persistida en `sessionStorage` hasta completar o cambiar
-el carrito.
+**Arquitectura:** `localStorage` para el carrito pre-confirmación. Una
+función transaccional de Postgres (`crear_pedido_atomico`) hace ella
+misma la lectura bloqueada (`FOR UPDATE`) de `viandas`, el cálculo de
+precios/total, y la creación de `pedidos`+`pedido_items` — invocable
+únicamente por `service_role`. Un limitador de abuso (HMAC de IP +
+sesión server-emitida como señal secundaria + circuito global de
+emergencia) antes de cualquier escritura.
 
 **Tech Stack:** Next.js 16 App Router, Server Actions, Supabase Postgres +
-RLS + PL/pgSQL, Vitest (unitarios) + Vitest contra Postgres local
-(integración), Vercel Cron.
+RLS + PL/pgSQL, Vitest (unitarios) + Vitest de integración contra
+Postgres real (Task 0), Vercel Cron.
 
 **Spec:** `docs/superpowers/specs/2026-09-04-carrito-pedidos-whatsapp-design.md`
 
 **Requiere PRIMERO:**
-1. Plan de Envíos/Adhesión a Puni implementado y su migración aplicada
-   (esta entrega usa `vianderas.costo_envio_propio`, `cobertura_envio`, y
-   la consulta server-only de adhesiones aprobadas de esa spec §5, y
-   reexporta `lib/envios/modalidades.ts`).
+1. Plan de Envíos/Adhesión a Puni implementado y aplicado.
 2. Preflight de backup de Supabase.
-3. Decidir y documentar en el repo el mecanismo de tests de integración
-   (Task 0) — es infraestructura nueva del proyecto, no algo que se
-   pueda improvisar tarea a tarea.
+3. Resolver la Task 0 (infraestructura de integración) — **bloqueante**,
+   esta máquina no tiene Docker Desktop instalado hoy.
 
 ## Global Constraints
 
 - No tocar Supabase hasta revisión de Codex.
-- El carrito nunca persiste server-side antes de la confirmación.
-- El servidor jamás confía en un precio, disponibilidad, costo de envío o
-  total que venga del cliente — todo se revalida contra la base.
-- `pedidos`/`pedido_items` se escriben **exclusivamente** dentro de
-  `crear_pedido_atomico`, con `EXECUTE` revocado a `public`/`anon`/
-  `authenticated` y otorgado solo a `service_role`. Ninguna Server Action
-  hace un `insert` directo a estas tablas.
-- Una modalidad de envío con costo `null` **nunca** aparece como opción
-  seleccionable — no se convierte en `0` ni en "a coordinar" dentro de un
-  pedido. Esto se filtra en `modalidadesDisponibles` (plan de
-  Envíos/Puni) y se revalida de nuevo server-side antes de crear el
-  pedido.
-- La vendedora nunca tiene un `UPDATE` sin restricciones sobre `pedidos`
-  — todo cambio de `estado` pasa por una tabla de transiciones válidas,
-  aplicada por trigger y por Server Action.
-- El consentimiento de marketing (`acepta_marketing`) es un campo
-  independiente, destildado por defecto.
-- `idempotency_key` vive en `sessionStorage`, sobrevive a un refresh de
-  la pantalla de checkout, y se regenera si el carrito cambia
-  materialmente antes de confirmar.
-- El limitador de abuso corre **antes** de cualquier consulta de
-  revalidación — un intento por encima del límite nunca llega a tocar
-  `viandas` ni `pedidos`.
-- Sin nuevas dependencias de **npm**. El uso de Postgres local para tests
-  de integración (Task 0) es una herramienta de desarrollo (Supabase
-  CLI), no un paquete de `package.json` — se documenta igual como una
-  adición real al proyecto, no se minimiza.
-- Reutilizar `telefonoParaWhatsapp` (`lib/viandera/telefono.ts`).
-- Todas las funciones puras de negocio llevan TDD: test que falla
-  primero. Las garantías que no son expresables como función pura
-  (atomicidad, límites de tasa, RLS) llevan test de integración (Task 0).
+- **Nunca ejecutar pruebas destructivas ni migraciones experimentales
+  contra el proyecto de producción de Supabase** — la infraestructura de
+  integración (Task 0) usa exclusivamente una instancia local o un
+  proyecto de staging separado, jamás producción.
+- `crear_pedido_atomico` hace su propia lectura bloqueada de `viandas`
+  dentro de la transacción — ninguna Server Action puede tratar una
+  lectura previa como autoritativa.
+- Todo `GRANT`/`REVOKE ... ON FUNCTION` incluye la firma completa de
+  tipos de argumentos.
+- La IP se hashea con HMAC-SHA256 y un secreto server-only, nunca con
+  una concatenación + hash simple, y nunca se guarda en texto plano.
+- El identificador de sesión para el limitador lo emite el servidor
+  (cookie `httpOnly`) y es una señal secundaria — el límite de IP es la
+  frontera de seguridad real.
+- El límite global es un circuito de emergencia de umbral alto, no un
+  bloqueo que pocas solicitudes maliciosas puedan activar en operación
+  normal.
+- El cron de purgado falla cerrado si `CRON_SECRET` no está configurado.
+- La lógica de purgado (pedidos y contadores del limitador) vive en un
+  único servicio compartido, nunca duplicada entre el cron y la acción
+  manual de admin.
+- Sin nuevas dependencias de npm.
+- Todas las funciones puras de negocio llevan TDD. Las garantías que
+  dependen de Postgres (atomicidad, locks, RLS, HMAC en el limitador)
+  llevan test de integración — no un mock.
 
 ---
 
-### Task 0: Infraestructura de tests de integración
+### Task 0: Infraestructura de tests de integración — bloqueante, dos caminos
 
-Ningún test existente en el repo toca una base de datos real — todos son
-funciones puras. La atomicidad de `crear_pedido_atomico`, el limitador de
-abuso, las transiciones validadas por trigger, y la inaccesibilidad
-pública de `nota_admin` (spec de Envíos/Puni) **no se pueden verificar
-honestamente con un mock** — un mock de Supabase solo prueba que el
-código llamó a la función correcta, no que Postgres de verdad hizo
-rollback o bloqueó una columna.
+**Confirmado**: esta máquina no tiene Docker Desktop instalado (`docker
+--version` no encuentra el binario). No se puede levantar Supabase local
+hoy sin una acción explícita del usuario. Dos caminos concretos, a
+elegir por el usuario antes de continuar:
 
-**Decisión de este plan:** usar `supabase start` (Supabase CLI, contenedor
-Docker local con Postgres real) como target de tests de integración.
-Vitest se conecta a esa instancia con `@supabase/supabase-js` (ya es
-dependencia) apuntando a las credenciales locales que imprime `supabase
-start`. Las migraciones de este plan y de Envíos/Puni se aplican ahí antes
-de correr los tests.
+**Camino A — instalar Docker Desktop.**
+- [ ] El usuario instala/autoriza Docker Desktop en esta máquina.
+- [ ] `supabase start` (Supabase CLI) levanta Postgres local.
+- [ ] Los tests de integración apuntan a las credenciales locales que
+  imprime `supabase start` — nunca a producción.
 
-**Files:**
-- Create: `vitest.integration.config.ts` (config separada, no corre en el
-  `npm test` normal — evita que CI/desarrollo cotidiano dependa de tener
-  Docker corriendo)
-- Create: `package.json` — nuevo script `test:integration` (Vitest con la
-  config de arriba)
-- Create: `lib/testing/clienteIntegracion.ts` (helper: crea un
-  `createClient`/`createAdminClient` apuntando a la instancia local)
-- Create: `docs/testing-integracion.md` (cómo levantar `supabase start`,
-  aplicar migraciones, correr `npm run test:integration`)
+**Camino B — proyecto Supabase de staging separado.**
+- [ ] El usuario crea (o designa) un proyecto Supabase distinto del de
+  producción, exclusivamente para tests de integración.
+- [ ] Los tests de integración apuntan a las credenciales de ese
+  proyecto de staging vía variables de entorno propias
+  (`SUPABASE_STAGING_URL`, `SUPABASE_STAGING_SERVICE_ROLE_KEY` — nunca
+  las mismas variables que apuntan a producción, para que sea imposible
+  correr un test destructivo contra el proyecto real por error de
+  configuración).
+- [ ] **Nunca** se corren pruebas destructivas ni migraciones
+  experimentales contra el proyecto de producción — el proyecto de
+  staging es prescindible/reseteable, el de producción no.
 
-- [ ] **Paso 1: Confirmar con el usuario** que instalar Supabase CLI
-  (herramienta de desarrollo, no dependencia de npm) y tener Docker
-  disponible localmente es aceptable — es infraestructura nueva para el
-  proyecto, no algo que este plan pueda asumir en silencio.
+**Files** (comunes a ambos caminos):
+- Create: `vitest.integration.config.ts`
+- Create: `lib/testing/clienteIntegracion.ts` (lee las credenciales de
+  variables de entorno — `SUPABASE_STAGING_*` o las locales de
+  `supabase start`, nunca hardcodeadas, nunca las de producción)
+- Create: `docs/testing-integracion.md` (documenta ambos caminos, cómo
+  aplicar las migraciones de este plan y de Envíos/Puni contra el target
+  elegido antes de correr `npm run test:integration`)
+- Modify: `package.json` — script `test:integration`
 
-- [ ] **Paso 2: Documentar el procedimiento** en
-  `docs/testing-integracion.md`: instalar CLI, `supabase start`, aplicar
-  migraciones de este plan y de Envíos/Puni contra la instancia local,
-  variables de entorno que necesita `test:integration` (URL y llaves
-  locales, nunca las de producción).
-
+- [ ] **Paso 1: Confirmar con el usuario cuál camino elige** (A o B) —
+  no se asume ninguno.
+- [ ] **Paso 2: Documentar el procedimiento elegido** en
+  `docs/testing-integracion.md`.
 - [ ] **Paso 3: Commit**
 
 ```bash
-git add vitest.integration.config.ts package.json lib/testing/clienteIntegracion.ts docs/testing-integracion.md
-git commit -m "chore: add local Postgres integration test infrastructure"
+git add vitest.integration.config.ts lib/testing/clienteIntegracion.ts docs/testing-integracion.md package.json
+git commit -m "chore: add integration test infrastructure (local or staging Supabase)"
 ```
+
+**No continuar a las Tasks que requieren test de integración (marcadas
+explícitamente) sin esto resuelto** — las tareas de funciones puras (sin
+I/O) sí pueden avanzar en paralelo.
 
 ---
 
-### Task 1: Migración — `pedidos`, `pedido_items`, función atómica, limitador de abuso
+### Task 1: Migración — `pedidos`, `pedido_items`, función atómica con lock real, limitador con HMAC
 
 **Files:**
 - Create: `supabase/migrations/202609040002_carrito_pedidos.sql`
-- Modify: `types/index.ts` (agregar `Pedido`, `PedidoItem`, entradas en
-  `Database.public.Tables`)
+- Modify: `types/index.ts`
 
 - [ ] **Paso 1: Escribir la migración**
 
 ```sql
--- Pedidos por WhatsApp: creación atómica, idempotencia con verificación
--- de contenido, limitador de abuso, transiciones de estado validadas,
--- retención mínima de datos del comprador.
+-- Pedidos por WhatsApp: creación atómica con lock real sobre viandas,
+-- idempotencia con request_hash canónico, limitador de abuso con HMAC,
+-- transiciones de estado validadas, retención mínima de datos.
 -- Aditiva, repetible, transaccional.
 
 begin;
@@ -150,6 +146,7 @@ begin;
 create table if not exists public.pedidos (
   id uuid primary key default gen_random_uuid(),
   idempotency_key uuid not null unique,
+  request_hash text not null,
   vianderas_id uuid not null references public.vianderas(id) on delete restrict,
   modalidad text not null check (modalidad in ('retiro', 'envio_propio', 'envio_puni')),
   costo_envio_capturado numeric not null default 0 check (costo_envio_capturado >= 0),
@@ -177,7 +174,7 @@ create table if not exists public.pedido_items (
   vianda_id uuid references public.viandas(id) on delete set null,
   nombre_capturado text not null,
   precio_capturado numeric not null check (precio_capturado >= 0),
-  cantidad integer not null check (cantidad > 0),
+  cantidad integer not null check (cantidad > 0 and cantidad <= 50),
   subtotal numeric generated always as (precio_capturado * cantidad) stored
 );
 
@@ -189,9 +186,6 @@ create trigger pedidos_set_updated_at
 before update on public.pedidos
 for each row execute function public.viandapp_set_updated_at();
 
--- Transiciones válidas de pedidos.estado para sesiones sin service role
--- (spec §11): generado->confirmado, generado->rechazado. Nada más.
--- También bloquea cualquier cambio a las columnas de contenido/montos.
 create or replace function public.pedidos_validar_transicion()
 returns trigger language plpgsql as $$
 begin
@@ -206,7 +200,8 @@ begin
      or new.direccion_envio is distinct from old.direccion_envio
      or new.vianderas_id is distinct from old.vianderas_id
      or new.modalidad is distinct from old.modalidad
-     or new.idempotency_key is distinct from old.idempotency_key then
+     or new.idempotency_key is distinct from old.idempotency_key
+     or new.request_hash is distinct from old.request_hash then
     raise exception 'solo se puede modificar el estado del pedido';
   end if;
 
@@ -243,94 +238,179 @@ create policy "viandera ve items de sus propios pedidos"
     )
   );
 
--- Sin policy de insert en absoluto para pedidos/pedido_items: el único
--- camino de escritura es crear_pedido_atomico, invocable solo por
--- service_role (revoke/grant más abajo).
+-- Tipo de resultado: la funcion nunca "falla silenciosamente" un rechazo
+-- de disponibilidad/precio -- devuelve ok=false con el detalle, sin
+-- insertar nada, o ok=true con el pedido creado (o el existente, por
+-- idempotencia).
+create type public.pedido_resultado as (
+  ok boolean,
+  pedido public.pedidos,
+  cambios jsonb
+);
 
 create or replace function public.crear_pedido_atomico(
   p_idempotency_key uuid,
   p_vianderas_id uuid,
   p_modalidad text,
-  p_costo_envio_capturado numeric,
-  p_total numeric,
+  p_costo_envio_esperado numeric,
+  p_items jsonb,
   p_nombre_comprador text,
   p_telefono_comprador text,
   p_direccion_envio text,
-  p_acepta_marketing boolean,
-  p_items jsonb
-) returns public.pedidos
+  p_acepta_marketing boolean
+) returns public.pedido_resultado
 language plpgsql
 as $$
 declare
   v_pedido public.pedidos;
-  v_items_hash text;
-  v_existing_hash text;
+  v_existente public.pedidos;
+  v_request_hash text;
+  v_items_canonicos jsonb;
+  v_cantidad_items integer;
+  v_cantidad_distintos integer;
+  v_viandas_bloqueadas jsonb;
+  v_cambios jsonb := '[]'::jsonb;
+  v_costo_envio_real numeric;
+  v_total numeric;
+  v_item jsonb;
+  v_fila record;
 begin
-  select id into v_pedido from public.pedidos where idempotency_key = p_idempotency_key;
-
-  if found then
-    select md5(coalesce(jsonb_agg(
-             jsonb_build_object(
-               'vianda_id', vianda_id,
-               'nombre_capturado', nombre_capturado,
-               'precio_capturado', precio_capturado,
-               'cantidad', cantidad
-             ) order by id
-           ), '[]'::jsonb)::text)
-      into v_existing_hash
-      from public.pedido_items
-      where pedido_id = v_pedido.id;
-
-    v_items_hash := md5(p_items::text);
-
-    if v_existing_hash is distinct from v_items_hash
-       or v_pedido.vianderas_id is distinct from p_vianderas_id
-       or v_pedido.modalidad is distinct from p_modalidad
-       or v_pedido.total is distinct from p_total then
-      raise exception 'idempotency_key_content_mismatch'
-        using errcode = 'P0001',
-              hint = 'La misma idempotency_key se reutilizó con contenido distinto.';
-    end if;
-
-    select * into v_pedido from public.pedidos where id = v_pedido.id;
-    return v_pedido;
+  -- 1. Validar forma de p_items ANTES de tocar viandas.
+  if p_items is null or jsonb_typeof(p_items) != 'array' or jsonb_array_length(p_items) = 0 then
+    raise exception 'items_invalidos' using errcode = 'P0001', hint = 'p_items debe ser un array no vacio';
   end if;
 
-  insert into public.pedidos (
-    idempotency_key, vianderas_id, modalidad, costo_envio_capturado, total,
-    nombre_comprador, telefono_comprador, direccion_envio,
-    acepta_marketing, consentimiento_marketing_en
-  ) values (
-    p_idempotency_key, p_vianderas_id, p_modalidad, p_costo_envio_capturado, p_total,
-    p_nombre_comprador, p_telefono_comprador, p_direccion_envio,
-    p_acepta_marketing, case when p_acepta_marketing then now() else null end
-  ) returning * into v_pedido;
+  select count(*), count(distinct (item->>'vianda_id'))
+    into v_cantidad_items, v_cantidad_distintos
+    from jsonb_array_elements(p_items) as item;
+
+  if v_cantidad_items != v_cantidad_distintos then
+    raise exception 'items_duplicados' using errcode = 'P0001';
+  end if;
+
+  if exists (
+    select 1 from jsonb_array_elements(p_items) as item
+    where (item->>'cantidad')::integer is null
+       or (item->>'cantidad')::integer < 1
+       or (item->>'cantidad')::integer > 50
+  ) then
+    raise exception 'cantidad_fuera_de_rango' using errcode = 'P0001';
+  end if;
+
+  -- 2. Items canonicos ordenados por vianda_id, para el hash Y para
+  -- comparar contra lo bloqueado mas abajo.
+  select jsonb_agg(
+           jsonb_build_object('vianda_id', item->>'vianda_id', 'cantidad', (item->>'cantidad')::integer)
+           order by item->>'vianda_id'
+         )
+    into v_items_canonicos
+    from jsonb_array_elements(p_items) as item;
+
+  v_request_hash := md5(
+    jsonb_build_object(
+      'vianderas_id', p_vianderas_id,
+      'modalidad', p_modalidad,
+      'items', v_items_canonicos,
+      'nombre_comprador', trim(p_nombre_comprador),
+      'telefono_comprador', trim(p_telefono_comprador),
+      'direccion_envio', trim(coalesce(p_direccion_envio, '')),
+      'acepta_marketing', p_acepta_marketing
+    )::text
+  );
+
+  -- 3. Bloquear y leer las filas reales de viandas.
+  select jsonb_agg(jsonb_build_object('id', id, 'nombre', nombre, 'precio', precio, 'disponible', disponible))
+    into v_viandas_bloqueadas
+    from public.viandas
+    where id in (select (item->>'vianda_id')::uuid from jsonb_array_elements(p_items) as item)
+      and vianderas_id = p_vianderas_id
+    for update;
+
+  -- 4. Comparar cada item pedido contra lo bloqueado; armar cambios.
+  for v_item in select * from jsonb_array_elements(p_items)
+  loop
+    select value into v_fila
+      from jsonb_to_recordset(coalesce(v_viandas_bloqueadas, '[]'::jsonb)) as value(id uuid, nombre text, precio numeric, disponible boolean)
+      where id = (v_item.value->>'vianda_id')::uuid;
+
+    if v_fila.id is null then
+      v_cambios := v_cambios || jsonb_build_object('vianda_id', v_item.value->>'vianda_id', 'tipo', 'plato_no_disponible');
+    elsif not v_fila.disponible then
+      v_cambios := v_cambios || jsonb_build_object('vianda_id', v_item.value->>'vianda_id', 'tipo', 'plato_no_disponible');
+    end if;
+  end loop;
+
+  -- 5. Resolver costo de envio vigente dentro de la misma transaccion
+  -- (implementacion completa de esta subconsulta se detalla junto con
+  -- la migracion de Envios/Puni -- referencia costo_envio_propio /
+  -- puni_adhesiones segun p_modalidad).
+  -- v_costo_envio_real := ... (ver Task 1 de este plan, subseccion "costo de envio")
+
+  if jsonb_array_length(v_cambios) > 0 then
+    return (false, null, v_cambios)::public.pedido_resultado;
+  end if;
+
+  -- 6. Idempotencia: intentar insertar, si ya existe comparar hash.
+  begin
+    insert into public.pedidos (
+      idempotency_key, request_hash, vianderas_id, modalidad,
+      costo_envio_capturado, total, nombre_comprador, telefono_comprador,
+      direccion_envio, acepta_marketing, consentimiento_marketing_en
+    )
+    select p_idempotency_key, v_request_hash, p_vianderas_id, p_modalidad,
+           v_costo_envio_real, v_total, p_nombre_comprador, p_telefono_comprador,
+           p_direccion_envio, p_acepta_marketing,
+           case when p_acepta_marketing then now() else null end
+    where not exists (select 1 from public.pedidos where idempotency_key = p_idempotency_key)
+    returning * into v_pedido;
+  exception when unique_violation then
+    -- Carrera: otra transaccion concurrente gano el insert entre el
+    -- "not exists" y este insert. Se resuelve igual que el caso
+    -- "ya existia" mas abajo.
+    null;
+  end;
+
+  if v_pedido.id is null then
+    select * into v_existente from public.pedidos where idempotency_key = p_idempotency_key;
+    if v_existente.request_hash is distinct from v_request_hash then
+      raise exception 'idempotency_key_content_mismatch' using errcode = 'P0001';
+    end if;
+    return (true, v_existente, '[]'::jsonb)::public.pedido_resultado;
+  end if;
 
   insert into public.pedido_items (pedido_id, vianda_id, nombre_capturado, precio_capturado, cantidad)
   select
     v_pedido.id,
     (item->>'vianda_id')::uuid,
-    item->>'nombre_capturado',
-    (item->>'precio_capturado')::numeric,
+    (select nombre from jsonb_to_recordset(v_viandas_bloqueadas) as v(id uuid, nombre text) where id = (item->>'vianda_id')::uuid),
+    (select precio from jsonb_to_recordset(v_viandas_bloqueadas) as v(id uuid, precio numeric) where id = (item->>'vianda_id')::uuid),
     (item->>'cantidad')::integer
   from jsonb_array_elements(p_items) as item;
 
-  return v_pedido;
+  return (true, v_pedido, '[]'::jsonb)::public.pedido_resultado;
 end;
 $$;
 
-revoke all on function public.crear_pedido_atomico from public;
-revoke all on function public.crear_pedido_atomico from anon;
-revoke all on function public.crear_pedido_atomico from authenticated;
-grant execute on function public.crear_pedido_atomico to service_role;
+revoke all on function public.crear_pedido_atomico(
+  uuid, uuid, text, numeric, jsonb, text, text, text, boolean
+) from public;
+revoke all on function public.crear_pedido_atomico(
+  uuid, uuid, text, numeric, jsonb, text, text, text, boolean
+) from anon;
+revoke all on function public.crear_pedido_atomico(
+  uuid, uuid, text, numeric, jsonb, text, text, text, boolean
+) from authenticated;
+grant execute on function public.crear_pedido_atomico(
+  uuid, uuid, text, numeric, jsonb, text, text, text, boolean
+) to service_role;
 
--- Limitador de abuso: contador de ventana fija por clave. La clave nunca
--- es una IP en texto plano — ver Task 3 para el hasheo antes de llegar
--- acá.
+-- Limitador de abuso: contador de ventana fija por clave (IP hasheada
+-- con HMAC, o sesion server-emitida como señal secundaria, o 'global').
 create table if not exists public.limite_solicitudes (
   clave text not null,
   ventana_inicio timestamptz not null,
   intentos integer not null default 1,
+  created_at timestamptz not null default now(),
   primary key (clave, ventana_inicio)
 );
 
@@ -350,62 +430,166 @@ as $$
   returning intentos;
 $$;
 
-revoke all on function public.registrar_intento_limite from public;
-revoke all on function public.registrar_intento_limite from anon;
-revoke all on function public.registrar_intento_limite from authenticated;
-grant execute on function public.registrar_intento_limite to service_role;
+revoke all on function public.registrar_intento_limite(text, timestamptz) from public;
+revoke all on function public.registrar_intento_limite(text, timestamptz) from anon;
+revoke all on function public.registrar_intento_limite(text, timestamptz) from authenticated;
+grant execute on function public.registrar_intento_limite(text, timestamptz) to service_role;
 
 commit;
 ```
 
-- [ ] **Paso 2: Actualizar `types/index.ts`** con `Pedido`, `PedidoItem`,
-  `ModalidadPedido`, `EstadoPedido`, y sus entradas en `Database`.
+**Nota de implementación honesta**: el paso 5 (resolver costo de envío
+vigente dentro de la función) queda esbozado con un comentario en vez de
+SQL completo en este documento — la subconsulta exacta depende de las
+tablas `vianderas`/`puni_adhesiones` de la migración de Envíos/Puni, que
+este plan asume ya aplicada (ver "Requiere PRIMERO"). Se completa al
+implementar, siguiendo el mismo patrón de `costoEnvioVigente`
+(`lib/envios/modalidades.ts`) traducido a SQL — `select
+costo_envio_propio from vianderas where id = p_vianderas_id` para
+`envio_propio`, `select costo_envio_puni from puni_adhesiones where
+viandera_id = p_vianderas_id and estado = 'aprobada'` para `envio_puni`,
+`0` para `retiro`. Si el costo resuelto es `null`, se agrega un
+`cambio` de tipo `modalidad_no_disponible` a `v_cambios` en vez de
+seguir con un `v_total` roto.
 
-- [ ] **Paso 3: Commit**
+- [ ] **Paso 2: Actualizar `types/index.ts`** — agregar `request_hash` a
+  `Pedido`, y el tipo del resultado compuesto si se termina modelando
+  del lado TypeScript también (`PedidoResultado`).
+
+- [ ] **Paso 3: Verificación real de la migración — bloqueante hasta
+  resolver la Task 0.** Este plan **no puede marcar la Task 1 como
+  completa** solo por revisión de lectura del SQL — hace falta
+  ejecutarlo contra un Postgres real (local o staging, según lo elegido
+  en la Task 0) y confirmar: la migración corre sin error, `select *
+  from pg_proc where proname = 'crear_pedido_atomico'` la encuentra con
+  la firma esperada, y una llamada de prueba manual (`select *
+  from crear_pedido_atomico(...)` con datos de prueba) devuelve el tipo
+  compuesto esperado. Sin esta verificación, la Task 1 queda en estado
+  "escrita, no validada" — explícito en el commit.
+
+- [ ] **Paso 4: Commit**
 
 ```bash
 git add supabase/migrations/202609040002_carrito_pedidos.sql types/index.ts
-git commit -m "feat: add pedidos migration with atomic order creation and rate limiting"
+git commit -m "feat: add pedidos migration with lock-based atomic order creation"
 ```
 
 ---
 
-### Task 2: Funciones puras de negocio (TDD)
+### Task 2: `calcularTotal` corregido (TDD, falla primero)
 
 **Files:**
-- Create: `lib/pedidos/total.ts`
-- Create: `lib/pedidos/total.test.ts`
-- Create: `lib/pedidos/revalidacion.ts`
-- Create: `lib/pedidos/revalidacion.test.ts`
-- Create: `lib/pedidos/mensaje.ts`
-- Create: `lib/pedidos/mensaje.test.ts`
-- Create: `lib/pedidos/limiteAbuso.ts`
-- Create: `lib/pedidos/limiteAbuso.test.ts`
+- Create: `lib/pedidos/total.ts`, `lib/pedidos/total.test.ts`
 
-**Interfaces:**
-- Consume: `Modalidad`, `modalidadesDisponibles`, `costoEnvioVigente` de
-  `lib/envios/modalidades.ts` (plan de Envíos/Puni) — no se reimplementa
-  acá; esas funciones ya excluyen modalidades con costo `null`.
-- Produce: `calcularTotal`, `validarUnaSolaCocina`, `detectarCambios`,
-  `construirMensajePedido`, `claveLimite`, `debeLimitar` — consumidos por
-  el Server Action (Task 3).
+- [ ] **Paso 1: Escribir el test que demuestra el bug ANTES de tocar la
+  implementación** — correrlo contra la implementación de la revisión
+  anterior (o una implementación mínima ingenua) y confirmar que
+  **falla en rojo** por la razón correcta:
 
-- [ ] **Paso 1-6**: idénticos a la versión anterior de este plan para
-  `calcularTotal`, `validarUnaSolaCocina` y `detectarCambios` — sin
-  cambios de esta revisión, se mantienen los tests y la implementación ya
-  escritos.
+```ts
+// lib/pedidos/total.test.ts
+import { describe, expect, it } from "vitest";
+import { calcularTotal, validarUnaSolaCocina } from "./total";
+
+describe("calcularTotal", () => {
+  it("suma precio por cantidad de cada item mas el envio", () => {
+    const items = [
+      { precioCapturado: 4200, cantidad: 2 },
+      { precioCapturado: 2800, cantidad: 1 },
+    ];
+    expect(calcularTotal(items, 600)).toBe(4200 * 2 + 2800 + 600);
+  });
+
+  it("envio en cero es valido", () => {
+    expect(calcularTotal([{ precioCapturado: 1000, cantidad: 1 }], 0)).toBe(1000);
+  });
+
+  it("lanza si la lista de items esta vacia", () => {
+    expect(() => calcularTotal([], 0)).toThrow();
+  });
+
+  it("lanza si algun precio o cantidad es negativo", () => {
+    expect(() => calcularTotal([{ precioCapturado: -1, cantidad: 1 }], 0)).toThrow();
+    expect(() => calcularTotal([{ precioCapturado: 100, cantidad: 0 }], 0)).toThrow();
+  });
+
+  it("respeta decimales de precio", () => {
+    expect(calcularTotal([{ precioCapturado: 999.5, cantidad: 3 }], 0)).toBe(2998.5);
+  });
+
+  // Casos nuevos de esta revision -- el bug real encontrado: en JS,
+  // `100 + null` es `100`, no un error. La validacion anterior
+  // (`item.precioCapturado < 0`) no atrapaba un `null` porque
+  // `null < 0` tambien es `false`. Estos tests deben fallar contra la
+  // implementacion vieja antes de corregirla.
+  it("rechaza costoEnvio null, NaN o Infinity", () => {
+    const items = [{ precioCapturado: 100, cantidad: 1 }];
+    expect(() => calcularTotal(items, null as unknown as number)).toThrow();
+    expect(() => calcularTotal(items, NaN)).toThrow();
+    expect(() => calcularTotal(items, Infinity)).toThrow();
+  });
+
+  it("rechaza precioCapturado null, NaN o Infinity", () => {
+    expect(() =>
+      calcularTotal([{ precioCapturado: null as unknown as number, cantidad: 1 }], 0),
+    ).toThrow();
+    expect(() => calcularTotal([{ precioCapturado: NaN, cantidad: 1 }], 0)).toThrow();
+    expect(() => calcularTotal([{ precioCapturado: Infinity, cantidad: 1 }], 0)).toThrow();
+  });
+
+  it("rechaza cantidad null, NaN o Infinity", () => {
+    expect(() =>
+      calcularTotal([{ precioCapturado: 100, cantidad: null as unknown as number }], 0),
+    ).toThrow();
+    expect(() => calcularTotal([{ precioCapturado: 100, cantidad: NaN }], 0)).toThrow();
+    expect(() => calcularTotal([{ precioCapturado: 100, cantidad: Infinity }], 0)).toThrow();
+  });
+
+  it("costo de envio 0 explicito sigue siendo valido junto a un precio 0", () => {
+    expect(calcularTotal([{ precioCapturado: 0, cantidad: 1 }], 0)).toBe(0);
+  });
+});
+
+describe("validarUnaSolaCocina", () => {
+  it("true si todos los items son de la misma cocina", () => {
+    expect(validarUnaSolaCocina([{ vianderaId: "a" }, { vianderaId: "a" }])).toBe(true);
+  });
+
+  it("false si hay mas de una cocina", () => {
+    expect(validarUnaSolaCocina([{ vianderaId: "a" }, { vianderaId: "b" }])).toBe(false);
+  });
+});
+```
+
+- [ ] **Paso 2: Correr los tests contra una implementación ingenua
+  (`item.precioCapturado < 0`), confirmar que los 3 tests nuevos de
+  null/NaN/Infinity fallan** — esto documenta el bug real, no uno
+  hipotético.
+
+- [ ] **Paso 3: Implementación corregida**
 
 ```ts
 // lib/pedidos/total.ts
 export type ItemParaTotal = { precioCapturado: number; cantidad: number };
 
+function numeroValido(valor: number, permitirCero: boolean): boolean {
+  if (!Number.isFinite(valor)) return false;
+  return permitirCero ? valor >= 0 : valor > 0;
+}
+
 export function calcularTotal(items: ItemParaTotal[], costoEnvio: number): number {
   if (items.length === 0) {
     throw new Error("No se puede calcular el total de un carrito vacío.");
   }
+  if (!numeroValido(costoEnvio, true)) {
+    throw new Error("Costo de envío inválido.");
+  }
   for (const item of items) {
-    if (item.precioCapturado < 0 || item.cantidad <= 0) {
-      throw new Error("Precio o cantidad inválidos.");
+    if (!numeroValido(item.precioCapturado, true)) {
+      throw new Error("Precio inválido.");
+    }
+    if (!numeroValido(item.cantidad, false) || !Number.isInteger(item.cantidad)) {
+      throw new Error("Cantidad inválida.");
     }
   }
   const subtotalItems = items.reduce(
@@ -421,34 +605,25 @@ export function validarUnaSolaCocina(items: { vianderaId: string }[]): boolean {
 }
 ```
 
-Tests: los mismos 5 casos ya definidos (suma exacta, envío en cero,
-lista vacía lanza, precio/cantidad inválidos lanza, decimales exactos) +
-**dos nuevos casos obligatorios de esta revisión**:
+- [ ] **Paso 4: Correr tests, confirmar que todos pasan.**
 
-```ts
-  it("costo de envio null nunca llega a calcularTotal: se rechaza si alguien lo intenta pasar", () => {
-    // calcularTotal recibe number, no number|null — este test documenta
-    // que el filtrado pasa ANTES, en modalidadesDisponibles/costoEnvioVigente
-    // (plan de Envíos/Puni), no acá. calcularTotal(items, null as any)
-    // debe lanzar en tiempo de ejecución si algo se saltea ese filtro.
-    expect(() => calcularTotal([{ precioCapturado: 100, cantidad: 1 }], null as never)).toThrow();
-  });
+- [ ] **Paso 5: Commit**
 
-  it("costo de envio 0 configurado explicitamente es valido", () => {
-    expect(calcularTotal([{ precioCapturado: 100, cantidad: 1 }], 0)).toBe(100);
-  });
+```bash
+git add lib/pedidos/total.ts lib/pedidos/total.test.ts
+git commit -m "fix: reject null/NaN/Infinity in calcularTotal instead of silently coercing"
 ```
 
-`detectarCambios` (Paso 4-6 de la versión anterior): sin cambios.
+---
 
-- [ ] **Paso 7: Test de `construirMensajePedido`** — igual al de la
-  versión anterior de este plan, sin cambios de contenido.
+### Task 3: Funciones puras del limitador de abuso (TDD)
 
-- [ ] **Paso 8: Implementación mínima** — sin cambios.
+**Files:**
+- Create: `lib/pedidos/limiteAbuso.ts`, `lib/pedidos/limiteAbuso.test.ts`
+- Create: `lib/pedidos/hmacIp.ts`, `lib/pedidos/hmacIp.test.ts`
 
-- [ ] **Paso 9: Correr tests, confirmar que pasan.**
-
-- [ ] **Paso 10: Test de `claveLimite`/`debeLimitar` (falla primero)**
+- [ ] **Paso 1: Test de `debeLimitar` — semántica corregida (falla
+  primero)**
 
 ```ts
 // lib/pedidos/limiteAbuso.test.ts
@@ -456,13 +631,12 @@ import { describe, expect, it } from "vitest";
 import { debeLimitar, ventanaActual } from "./limiteAbuso";
 
 describe("debeLimitar", () => {
-  it("false si los intentos estan por debajo del limite", () => {
-    expect(debeLimitar(3, 5)).toBe(false);
-  });
-
-  it("true si los intentos alcanzan o superan el limite", () => {
-    expect(debeLimitar(5, 5)).toBe(true);
-    expect(debeLimitar(6, 5)).toBe(true);
+  it("con limite 5: las primeras 5 solicitudes se permiten, la 6a se bloquea", () => {
+    // intentos ya incluye el intento actual (post-incremento).
+    expect(debeLimitar(1, 5)).toBe(false);
+    expect(debeLimitar(4, 5)).toBe(false);
+    expect(debeLimitar(5, 5)).toBe(false); // la 5a se permite
+    expect(debeLimitar(6, 5)).toBe(true);  // la 6a se bloquea
   });
 });
 
@@ -474,12 +648,12 @@ describe("ventanaActual", () => {
 });
 ```
 
-- [ ] **Paso 11: Implementación mínima**
+- [ ] **Paso 2: Implementación (corregida — `>` en vez de `>=`)**
 
 ```ts
 // lib/pedidos/limiteAbuso.ts
-export function debeLimitar(intentos: number, limite: number): boolean {
-  return intentos >= limite;
+export function debeLimitar(intentosDespuesDeIncrementar: number, limite: number): boolean {
+  return intentosDespuesDeIncrementar > limite;
 }
 
 export function ventanaActual(ahora: Date, minutosVentana: number): Date {
@@ -488,71 +662,121 @@ export function ventanaActual(ahora: Date, minutosVentana: number): Date {
 }
 ```
 
-- [ ] **Paso 12: Correr tests, confirmar que pasan.**
+- [ ] **Paso 3: Test de `hmacIp` (falla primero)**
 
-- [ ] **Paso 13: Commit**
+```ts
+// lib/pedidos/hmacIp.test.ts
+import { describe, expect, it } from "vitest";
+import { hmacIp } from "./hmacIp";
+
+describe("hmacIp", () => {
+  it("es deterministico para la misma IP y secreto", () => {
+    expect(hmacIp("190.190.1.1", "secreto-a")).toBe(hmacIp("190.190.1.1", "secreto-a"));
+  });
+
+  it("IPs distintas producen hashes distintos", () => {
+    expect(hmacIp("190.190.1.1", "secreto-a")).not.toBe(hmacIp("190.190.1.2", "secreto-a"));
+  });
+
+  it("el mismo IP con secretos distintos produce hashes distintos", () => {
+    expect(hmacIp("190.190.1.1", "secreto-a")).not.toBe(hmacIp("190.190.1.1", "secreto-b"));
+  });
+
+  it("el resultado nunca contiene la IP original", () => {
+    const resultado = hmacIp("190.190.1.1", "secreto-a");
+    expect(resultado).not.toContain("190.190.1.1");
+  });
+});
+```
+
+- [ ] **Paso 4: Implementación — HMAC real, no concatenación + SHA
+  simple**
+
+```ts
+// lib/pedidos/hmacIp.ts
+import "server-only";
+import { createHmac } from "node:crypto";
+
+export function hmacIp(ip: string, secreto: string): string {
+  return createHmac("sha256", secreto).update(ip).digest("hex");
+}
+
+export function hmacIpDesdeEnv(ip: string): string {
+  const secreto = process.env.RATE_LIMIT_SECRET;
+  if (!secreto) {
+    throw new Error("RATE_LIMIT_SECRET no configurado.");
+  }
+  return hmacIp(ip, secreto);
+}
+```
+
+  `RATE_LIMIT_SECRET` se suma a las variables de entorno server-only de
+  `CLAUDE.md`.
+
+- [ ] **Paso 5: Correr tests, confirmar que pasan.**
+
+- [ ] **Paso 6: Commit**
 
 ```bash
-git add lib/pedidos/
-git commit -m "feat: add pure order total, revalidation, message, and rate-limit logic with tests"
+git add lib/pedidos/limiteAbuso.ts lib/pedidos/limiteAbuso.test.ts lib/pedidos/hmacIp.ts lib/pedidos/hmacIp.test.ts
+git commit -m "fix: correct rate-limit off-by-one semantics and use real HMAC for IP hashing"
 ```
 
 ---
 
-### Task 3: Server Action `generarPedido`
+### Task 4: Resto de funciones puras (`detectarCambios`, `construirMensajePedido`)
+
+Sin cambios respecto a la versión anterior de este plan — mismos tests e
+implementación para `detectarCambios` (`lib/pedidos/revalidacion.ts`) y
+`construirMensajePedido` (`lib/pedidos/mensaje.ts`).
+
+- [ ] **Commit**
+
+```bash
+git add lib/pedidos/revalidacion.ts lib/pedidos/revalidacion.test.ts lib/pedidos/mensaje.ts lib/pedidos/mensaje.test.ts
+git commit -m "feat: add pure order revalidation-diff and WhatsApp message logic with tests"
+```
+
+---
+
+### Task 5: Sesión server-emitida (cookie `httpOnly`)
+
+**Files:**
+- Create: `app/pedido/sesion.ts` (Server Action o helper de Route
+  Handler que setea la cookie)
+
+- [ ] **Paso 1**: al entrar a la pantalla de checkout, si no existe la
+  cookie `viandapp_sesion` (httpOnly, `secure` en producción,
+  `sameSite: 'lax'`), el servidor genera un valor aleatorio
+  (`crypto.randomUUID()`) y la setea. El valor es opaco — el cliente
+  nunca lo lee ni lo genera, solo el navegador lo reenvía
+  automáticamente.
+- [ ] **Paso 2**: documentar explícitamente en el código que esta cookie
+  es una **señal secundaria** para el limitador (Task 6) — nunca una
+  frontera de autenticación ni de seguridad por sí sola.
+- [ ] **Paso 3: Commit**
+
+```bash
+git add app/pedido/sesion.ts
+git commit -m "feat: add server-issued opaque session cookie as a secondary rate-limit signal"
+```
+
+---
+
+### Task 6: Server Action `generarPedido`
 
 **Files:**
 - Create: `app/pedido/actions.ts`
-- Create: `lib/pedidos/hashIp.ts` (hasheo server-only de IP, nunca
-  guardada en texto plano)
-- Create: `lib/pedidos/hashIp.test.ts`
 
 **Interfaces:**
 - Consume: `calcularTotal`, `validarUnaSolaCocina`, `detectarCambios`,
-  `construirMensajePedido`, `debeLimitar`, `ventanaActual` (Task 2);
-  `modalidadesDisponibles`, `costoEnvioVigente` (plan de Envíos/Puni);
-  `telefonoParaWhatsapp` (existente).
-- Produce: tipo de resultado consumido por la UI (Task 5).
+  `construirMensajePedido` (Task 4); `debeLimitar`, `ventanaActual`,
+  `hmacIpDesdeEnv` (Task 3); `modalidadesDisponibles`,
+  `costoEnvioVigente` (plan de Envíos/Puni); `telefonoParaWhatsapp`.
 
-- [ ] **Paso 1: `hashIp`**
-
-```ts
-// lib/pedidos/hashIp.ts
-import "server-only";
-import { createHash } from "node:crypto";
-
-export function hashIp(ip: string): string {
-  const salt = process.env.RATE_LIMIT_SALT;
-  if (!salt) {
-    throw new Error("RATE_LIMIT_SALT no configurado.");
-  }
-  return createHash("sha256").update(`${ip}:${salt}`).digest("hex");
-}
-```
-
-Test: mismo IP + mismo salt siempre da el mismo hash; IPs distintas dan
-hashes distintos; nunca devuelve la IP original en el string resultante
-(assert `!resultado.includes(ip)`). `RATE_LIMIT_SALT` se suma a las
-variables de entorno server-only de `CLAUDE.md` en el commit de esta
-tarea.
-
-- [ ] **Paso 2: Definir el contrato de entrada/salida**
+- [ ] **Paso 1: Contrato**
 
 ```ts
-export type ItemCarrito = { platoId: string; cantidad: number; precioVisto: number };
-
-export type DatosConfirmacion = {
-  vianderaId: string;
-  items: ItemCarrito[];
-  modalidad: "retiro" | "envio_propio" | "envio_puni";
-  nombreComprador: string;
-  telefonoComprador: string;
-  direccionEnvio: string | null;
-  aceptaMarketing: boolean;
-  idempotencyKey: string;
-  sesionId: string; // token opaco generado por el cliente, ver Task 5
-};
-
 export type ResultadoGenerarPedido =
   | { status: "limite_excedido"; mensaje: string }
   | { status: "revisar_carrito"; cambios: CambioDetectado[] }
@@ -560,196 +784,73 @@ export type ResultadoGenerarPedido =
   | { status: "ok"; pedidoId: string; whatsappHref: string };
 ```
 
-- [ ] **Paso 3: Implementar `generarPedido(datos: DatosConfirmacion)`**
+- [ ] **Paso 2: Implementar, en este orden**
 
-Orden de operaciones (cada una corta el flujo si falla):
+1. **Limitador**, antes de cualquier otra cosa:
+   - IP real de la request (`x-forwarded-for` detrás de Vercel) →
+     `hmacIpDesdeEnv` → `registrar_intento_limite('ip:' + hash,
+     ventanaActual(ahora, 60))`, límite 10/hora. `debeLimitar` → si es
+     `true`, `status: "limite_excedido"`, cortar acá.
+   - Sesión (cookie de Task 5, señal secundaria) →
+     `registrar_intento_limite('sesion:' + cookie, ventanaActual(ahora,
+     60))`, límite 5/hora — **informativo**: si se excede, se puede
+     mostrar un mensaje más amigable, pero no reemplaza el chequeo de
+     IP (que ya cortó arriba si correspondía).
+   - Global (circuito de emergencia): `registrar_intento_limite('global',
+     ventanaActual(ahora, 5))`, límite 1000/5min. Si se excede, además
+     de cortar, loguear con severidad alta (para que sea visible como
+     incidente, no como rechazo rutinario).
+2. Validación liviana de campos + revalidación no bloqueante (misma
+   lógica que la versión anterior) para poder mostrar `revisar_carrito`
+   con buena UX sin gastar la llamada pesada en el caso obvio.
+3. Armar `p_items` (jsonb) con `{vianda_id, cantidad, precio_esperado:
+   item.precioVisto}`.
+4. `admin.rpc('crear_pedido_atomico', {...})`. Manejar:
+   - `ok: false` → `status: "revisar_carrito"` con los `cambios`
+     devueltos por la función (la fuente de verdad real, no el chequeo
+     liviano del paso 2).
+   - Excepción `idempotency_key_content_mismatch` → `status: "error"`
+     pidiendo recargar el carrito.
+   - `ok: true` → seguir.
+5. `construirMensajePedido`, armar `whatsappHref`.
+6. `{ status: "ok", pedidoId, whatsappHref }`.
 
-1. **Limitador de abuso, primero que nada.** Tres chequeos, cualquiera
-   que falle corta el flujo con `status: "limite_excedido"` sin tocar
-   `viandas` ni `pedidos`:
-   - Global: `registrar_intento_limite('global', ventanaActual(ahora, 5))`,
-     límite inicial 100 por ventana de 5 minutos.
-   - Por sesión: `registrar_intento_limite('sesion:' + datos.sesionId,
-     ventanaActual(ahora, 60))`, límite inicial 5 por hora.
-   - Por origen: obtener la IP de la request (headers de Next.js —
-     `x-forwarded-for` detrás de Vercel), `hashIp()`,
-     `registrar_intento_limite('ip:' + hash, ventanaActual(ahora, 60))`,
-     límite inicial 10 por hora (más laxo que por sesión, porque varias
-     personas legítimas pueden compartir una IP — ej. una casa, un
-     comercio con wifi compartido).
-2. Validar campos obligatorios presentes (nombre, teléfono, dirección si
-   `modalidad !== 'retiro'`).
-3. `validarUnaSolaCocina` sobre los items recibidos.
-4. Consultar `viandas` actuales para los `platoId` recibidos, filtrando
-   por `vianderas_id` en la misma query.
-5. `detectarCambios` entre lo que el cliente ve y lo que el servidor
-   acaba de leer. Si no está vacío → `revisar_carrito`, sin escribir
-   nada.
-6. Consultar la config de envío vigente de la viandera (spec de
-   Envíos/Puni §5, consulta server-only) y llamar
-   `modalidadesDisponibles`/`costoEnvioVigente`. **Si la modalidad
-   pedida ya no está en el resultado de `modalidadesDisponibles` (porque
-   su costo es `null`, o porque la adhesión Puni cambió de estado entre
-   que se abrió el carrito y se confirmó) → error explícito, nunca se
-   sigue con un costo inventado.**
-7. `calcularTotal` con los precios recién leídos del servidor + el costo
-   de envío del paso 6 (garantizado no-`null` en este punto).
-8. Verificar teléfono de la vendedora vía `telefonoParaWhatsapp`.
-9. Armar el `jsonb` de ítems y llamar
-   `admin.rpc('crear_pedido_atomico', {...})`. Si la función lanza
-   `idempotency_key_content_mismatch` → `status: "error"` con un mensaje
-   que le pida al usuario recargar el carrito desde cero (caso raro:
-   `idempotencyKey` reutilizada con contenido distinto, no debería pasar
-   si el cliente regenera la key al cambiar el carrito — ver Task 5).
-10. `construirMensajePedido` con los datos capturados, armar el
-    `whatsappHref`.
-11. Devolver `{ status: "ok", pedidoId, whatsappHref }`.
-
-- [ ] **Paso 4: Tests unitarios** (mock de Supabase admin client) para:
-  límite excedido en cualquiera de las tres capas corta antes de
-  cualquier consulta a `viandas` (spy que falla el test si se llama);
-  cambio de precio detectado devuelve `revisar_carrito` sin llamar
-  `crear_pedido_atomico`; ítems de dos cocinas distintas rechazados antes
-  de cualquier consulta; una modalidad con costo `null` nunca llega a
-  `calcularTotal` (mock de `costoEnvioVigente` devolviendo `null`,
-  confirmar `status: "error"`).
-
-- [ ] **Paso 5: Tests de integración** (Task 0, contra Postgres local):
-  - Dos llamadas con el mismo `idempotencyKey` y el mismo contenido
-    devuelven el mismo `pedidoId`, y `pedido_items` tiene exactamente la
-    cantidad de filas esperada (no el doble).
-  - La misma `idempotencyKey` con contenido distinto (ej. otro total)
-    lanza `idempotency_key_content_mismatch`.
-  - Forzar un fallo a mitad de la función (ej. un `vianda_id` que viola
-    una FK) y confirmar que **no queda ninguna fila en `pedidos`** —
-    la transacción completa hizo rollback.
-  - El limitador de abuso: superar el límite de una clave y confirmar
-    que la siguiente llamada a `registrar_intento_limite` para esa clave
-    en la misma ventana sigue incrementando (no se resetea solo), y que
-    una clave distinta no se ve afectada.
-
-- [ ] **Paso 6: Commit**
-
-```bash
-git add app/pedido/actions.ts app/pedido/actions.test.ts lib/pedidos/hashIp.ts lib/pedidos/hashIp.test.ts
-git commit -m "feat: add generarPedido server action with rate limiting and atomic order creation"
-```
-
----
-
-### Task 4: Carrito en `localStorage` + UI
-
-Sin cambios respecto a la versión anterior de este plan — carrito de
-cliente, `CarritoProvider`, `BotonAgregarAlCarrito`, `CajonCarrito`. Ver
-detalle de pasos en la spec §3.
-
-**Files:**
-- Create: `lib/carrito/almacenamiento.ts`, `lib/carrito/almacenamiento.test.ts`
-- Create: `components/carrito/CarritoProvider.tsx`
-- Create: `components/carrito/BotonAgregarAlCarrito.tsx`
-- Create: `components/carrito/CajonCarrito.tsx`
-- Modify: `components/storefront/PublicDishCard.tsx`,
-  `components/consumer/DishCard.tsx`
-
-- [ ] **Pasos 1-6**: implementación de almacenamiento, provider, botón,
-  cajón, responsive — sin cambios de esta revisión.
-
-- [ ] **Paso 7: Commit**
-
-```bash
-git add lib/carrito/ components/carrito/ components/storefront/PublicDishCard.tsx components/consumer/DishCard.tsx
-git commit -m "feat: add client-side single-vendor cart"
-```
-
----
-
-### Task 5: Pantalla de confirmación y resultado
-
-**Files:**
-- Create: `components/carrito/ConfirmarPedido.tsx`
-- Create: `components/carrito/RevisarCambios.tsx`
-- Create: `lib/carrito/sesionCheckout.ts` (maneja `idempotencyKey` +
-  `sesionId` en `sessionStorage`)
-- Create: `lib/carrito/sesionCheckout.test.ts`
-
-**Interfaces:**
-- Consume: `generarPedido` (Task 3), `modalidadesDisponibles` (plan de
-  Envíos/Puni).
-
-- [ ] **Paso 1: `sesionCheckout.ts`** — maneja dos valores en
-  `sessionStorage` (clave `viandapp:checkout`):
-
-```ts
-type SesionCheckout = {
-  idempotencyKey: string;
-  sesionId: string;
-  huellaCarrito: string; // hash simple del contenido del carrito al generar la key
-};
-```
-
-  - `obtenerOCrearSesion(huellaCarritoActual)`: si no hay sesión guardada,
-    o la `huellaCarrito` guardada no coincide con la actual (el carrito
-    cambió desde que se generó la key), genera una nueva
-    `idempotencyKey` (y `sesionId` si tampoco existía) y la persiste. Si
-    coincide, devuelve la existente — sobrevive a un refresh de la
-    pantalla.
-  - `limpiarSesion()`: se llama al completar el pedido con éxito.
-  - Test: huella distinta regenera la key; huella igual la conserva;
-    `sesionId` persiste incluso cuando la key se regenera (identifica la
-    sesión de navegación, no el contenido puntual del carrito).
-
-- [ ] **Paso 2: `ConfirmarPedido`** — usa `obtenerOCrearSesion` (no
-  `crypto.randomUUID()` suelto como en la versión anterior de este plan),
-  muestra solo las modalidades que `modalidadesDisponibles` habilita
-  (nunca una con costo `null`), checkbox de marketing destildado por
-  defecto.
-
-- [ ] **Paso 3: Manejo de `revisar_carrito`** — igual a la versión
-  anterior: `RevisarCambios` lista los cambios, botón "Volver al
-  carrito" actualiza el carrito a los valores nuevos.
-
-- [ ] **Paso 4: Manejo de `limite_excedido`** — mensaje genérico ("Hubo
-  muchos intentos, probá de nuevo en un rato"), sin detalle de qué capa
-  del límite se excedió.
-
-- [ ] **Paso 5: Resultado `ok`** — vacía el carrito y llama
-  `limpiarSesion()`, muestra el link de WhatsApp con el texto explícito
-  de que abrir WhatsApp no confirma el pedido.
-
-- [ ] **Paso 6: Commit**
-
-```bash
-git add components/carrito/ConfirmarPedido.tsx components/carrito/RevisarCambios.tsx lib/carrito/sesionCheckout.ts lib/carrito/sesionCheckout.test.ts
-git commit -m "feat: add order confirmation flow with durable idempotency and rate-limit handling"
-```
-
----
-
-### Task 6: Panel de pedidos en `/viandera`
-
-**Files:**
-- Create: `app/viandera/pedidos/page.tsx`
-- Create: `components/viandera/TarjetaPedido.tsx`
-- Modify: `app/viandera/actions.ts` (agregar `actualizarEstadoPedido`)
-
-**Interfaces:**
-- Consume: RLS + trigger de transición de `pedidos` (Task 1).
-
-- [ ] **Paso 1: Listado** — pedidos ordenados por `created_at desc`,
-  estado, ítems, total, modalidad.
-
-- [ ] **Paso 2: `actualizarEstadoPedido`** — Server Action que autentica
-  que el pedido pertenece a la vendedora, valida la transición contra la
-  tabla de la spec §11 (`generado`→`confirmado`/`rechazado` únicamente)
-  **antes** de escribir — el trigger de la Task 1 es la red de
-  seguridad, no el único control; un error de transición debe dar un
-  mensaje claro en la UI, no un error crudo de Postgres.
-
-- [ ] **Paso 3: Test** — intento de transición inválida
-  (`confirmado`→`generado`) devuelve error sin llegar a hacer `update`
-  (mock que falla si se invoca).
+- [ ] **Paso 3: Tests unitarios** (mock del admin client) — límite
+  excedido corta antes de cualquier llamada a `crear_pedido_atomico`;
+  `ok: false` de la función se traduce en `revisar_carrito`;
+  `idempotency_key_content_mismatch` se traduce en el mensaje correcto.
 
 - [ ] **Paso 4: Commit**
+
+```bash
+git add app/pedido/actions.ts app/pedido/actions.test.ts
+git commit -m "feat: add generarPedido server action with layered rate limiting"
+```
+
+---
+
+### Task 7: Carrito en `localStorage` + UI + pantalla de confirmación
+
+Sin cambios de fondo respecto a la versión anterior de este plan —
+`CarritoProvider`, `BotonAgregarAlCarrito`, `CajonCarrito`,
+`ConfirmarPedido`, `RevisarCambios`, `sesionCheckout.ts` (idempotencyKey
+en `sessionStorage`, regenerada si el carrito cambia).
+
+- [ ] **Commit**
+
+```bash
+git add lib/carrito/ components/carrito/
+git commit -m "feat: add client-side cart and order confirmation UI"
+```
+
+---
+
+### Task 8: Panel de pedidos en `/viandera`
+
+Sin cambios respecto a la versión anterior — listado,
+`actualizarEstadoPedido` con validación de transición.
+
+- [ ] **Commit**
 
 ```bash
 git add app/viandera/pedidos/ components/viandera/TarjetaPedido.tsx app/viandera/actions.ts
@@ -758,76 +859,48 @@ git commit -m "feat: add order list and validated status transitions in seller p
 
 ---
 
-### Task 7: Purgado automático de datos del comprador
+### Task 9: Servicio de purgado compartido (cron seguro + limpieza del limitador)
 
 **Files:**
-- Create: `lib/pedidos/purgado.ts`
-- Create: `lib/pedidos/purgado.test.ts`
+- Create: `lib/pedidos/servicioPurgado.ts` (extraído, usado por cron Y
+  por la acción manual — nunca duplicado)
+- Create: `lib/pedidos/servicioPurgado.test.ts`
 - Create: `app/api/cron/purgar-pedidos/route.ts`
-- Modify: `vercel.json` (crear si no existe) — agregar el cron
-- Modify: `app/admin/actions.ts` — agregar `purgarPedidosVencidos` como
-  gatillo manual de respaldo
+- Modify: `vercel.json`
+- Modify: `app/admin/actions.ts`
 
-- [ ] **Paso 1: Test y función pura** — `debePurgar(pedido, ahora)` es
-  `true` si `ahora >= purgar_datos_en` y `datos_purgados === false`.
-  Test adicional: `aplicarPurgado(pedido)` devuelve el pedido con
-  `nombre_comprador`/`telefono_comprador`/`direccion_envio` en `null` y
-  `datos_purgados: true`, **sin tocar** `total`, `costo_envio_capturado`,
-  ni ningún campo de `pedido_items` (la función ni siquiera acepta esos
-  campos como entrada — no puede tocarlos por construcción del tipo).
+- [ ] **Paso 1: `servicioPurgado.ts`**
 
 ```ts
-// lib/pedidos/purgado.ts
-export type PedidoParaPurgar = {
-  id: string;
-  purgarDatosEn: string;
-  datosPurgados: boolean;
-};
-
-export function debePurgar(pedido: PedidoParaPurgar, ahora: Date): boolean {
-  return !pedido.datosPurgados && ahora >= new Date(pedido.purgarDatosEn);
-}
-```
-
-- [ ] **Paso 2: Route Handler del cron**
-
-```ts
-// app/api/cron/purgar-pedidos/route.ts
+// lib/pedidos/servicioPurgado.ts
 import "server-only";
-import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { debePurgar } from "@/lib/pedidos/purgado";
 
-export async function GET(request: Request) {
-  const auth = request.headers.get("authorization");
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+export type ResultadoPurgado =
+  | { ok: true; pedidosPurgados: number; contadoresLimpiados: number }
+  | { ok: false; error: string };
 
+const RETENCION_LIMITADOR_DIAS = 7;
+
+export async function ejecutarPurgado(): Promise<ResultadoPurgado> {
   const admin = createAdminClient();
   const ahora = new Date();
 
-  const { data: candidatos, error } = await admin
+  const { data: candidatos, error: errorSelect } = await admin
     .from("pedidos")
-    .select("id, purgar_datos_en, datos_purgados")
+    .select("id")
     .eq("datos_purgados", false)
     .lte("purgar_datos_en", ahora.toISOString());
 
-  if (error) {
-    return NextResponse.json({ error: "Fallo al consultar" }, { status: 500 });
+  if (errorSelect) {
+    return { ok: false, error: "No pudimos consultar pedidos vencidos." };
   }
 
-  const idsAPurgar = (candidatos ?? [])
-    .filter((p) =>
-      debePurgar(
-        { id: p.id, purgarDatosEn: p.purgar_datos_en, datosPurgados: p.datos_purgados },
-        ahora,
-      ),
-    )
-    .map((p) => p.id);
+  const ids = (candidatos ?? []).map((p) => p.id);
+  let pedidosPurgados = 0;
 
-  if (idsAPurgar.length > 0) {
-    await admin
+  if (ids.length > 0) {
+    const { error: errorUpdate, count } = await admin
       .from("pedidos")
       .update({
         nombre_comprador: null,
@@ -835,14 +908,71 @@ export async function GET(request: Request) {
         direccion_envio: null,
         datos_purgados: true,
       })
-      .in("id", idsAPurgar);
+      .in("id", ids)
+      .select("id", { count: "exact" });
+
+    // Corregido en esta revision: si la escritura falla, se devuelve
+    // error explicito -- nunca se reporta "purgados: N" sin haber
+    // confirmado que el update efectivamente se aplico.
+    if (errorUpdate) {
+      return { ok: false, error: "No pudimos purgar los pedidos vencidos." };
+    }
+    pedidosPurgados = count ?? ids.length;
   }
 
-  return NextResponse.json({ purgados: idsAPurgar.length });
+  const limiteRetencion = new Date(ahora.getTime() - RETENCION_LIMITADOR_DIAS * 24 * 60 * 60 * 1000);
+  const { error: errorLimite, count: contadoresLimpiados } = await admin
+    .from("limite_solicitudes")
+    .delete()
+    .lt("ventana_inicio", limiteRetencion.toISOString())
+    .select("clave", { count: "exact" });
+
+  if (errorLimite) {
+    // El purgado de pedidos ya se aplico -- no se revierte, pero se
+    // reporta el fallo parcial en vez de un exito completo falso.
+    return { ok: false, error: "Pedidos purgados, pero falló la limpieza del limitador." };
+  }
+
+  return { ok: true, pedidosPurgados, contadoresLimpiados: contadoresLimpiados ?? 0 };
 }
 ```
 
-- [ ] **Paso 3: `vercel.json`**
+- [ ] **Paso 2: Test** — mock del admin client devolviendo error en el
+  `update` de pedidos → `ejecutarPurgado()` devuelve `{ok: false, ...}`,
+  **nunca** `{ok: true, pedidosPurgados: N}` con `N > 0` cuando la
+  escritura falló.
+
+- [ ] **Paso 3: Route Handler del cron — falla cerrado**
+
+```ts
+// app/api/cron/purgar-pedidos/route.ts
+import "server-only";
+import { NextResponse } from "next/server";
+import { ejecutarPurgado } from "@/lib/pedidos/servicioPurgado";
+
+export async function GET(request: Request) {
+  const secret = process.env.CRON_SECRET;
+  const auth = request.headers.get("authorization");
+
+  // Corregido en esta revision: si CRON_SECRET no esta configurado,
+  // rechaza -- nunca autoriza por ausencia/vacio del secreto.
+  if (!secret || auth !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const resultado = await ejecutarPurgado();
+  if (!resultado.ok) {
+    return NextResponse.json({ error: resultado.error }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    purgados: resultado.pedidosPurgados,
+    limitadorLimpiado: resultado.contadoresLimpiados,
+  });
+}
+```
+
+- [ ] **Paso 4: `vercel.json`**
 
 ```json
 {
@@ -850,84 +980,106 @@ export async function GET(request: Request) {
 }
 ```
 
-  Corre diario a las 6am UTC. `CRON_SECRET` se suma a las variables de
-  entorno server-only de `CLAUDE.md`.
+  **Confirmar antes de desplegar** (no asumido en este plan): qué plan
+  de Vercel tiene el proyecto y si admite esta frecuencia — el plan
+  Hobby de Vercel permite 1 invocación de cron por día por proyecto
+  (esta frecuencia diaria calza), pero si en algún momento se quisiera
+  una frecuencia mayor, hay que confirmar el plan contratado primero,
+  no asumir que está disponible.
 
-- [ ] **Paso 4: `purgarPedidosVencidos`** en `/admin` — mismo cuerpo que
-  el Route Handler, gateado por `esAdmin()`, como gatillo manual
-  inmediato (ej. para verificar que el mecanismo funciona sin esperar al
-  cron, o como respaldo si el cron falla por algún motivo).
-
-- [ ] **Paso 5: Test de integración** (Task 0): un pedido con
-  `purgar_datos_en` en el pasado, después de correr el purgado, tiene
-  `nombre_comprador`/`telefono_comprador`/`direccion_envio` en `null` y
-  `datos_purgados = true`, pero `total`, `costo_envio_capturado`, y todas
-  las filas de `pedido_items` **sin ningún cambio**.
+- [ ] **Paso 5: `purgarPedidosVencidos`** en `/admin` — llama al mismo
+  `ejecutarPurgado()`, gateado por `esAdmin()`, como gatillo manual de
+  respaldo (nunca lógica duplicada).
 
 - [ ] **Paso 6: Commit**
 
 ```bash
-git add lib/pedidos/purgado.ts lib/pedidos/purgado.test.ts app/api/cron/purgar-pedidos/route.ts vercel.json app/admin/actions.ts
-git commit -m "feat: add automatic Vercel Cron purge of expired buyer data"
+git add lib/pedidos/servicioPurgado.ts lib/pedidos/servicioPurgado.test.ts app/api/cron/purgar-pedidos/route.ts vercel.json app/admin/actions.ts
+git commit -m "feat: extract shared purge service, fail-closed cron, and rate-limit cleanup"
+```
+
+---
+
+### Task 10: Tests de integración (requiere Task 0 resuelta)
+
+**Files:**
+- Create: `app/pedido/actions.integration.test.ts`
+
+Los 12 casos listados en la spec §13 (puntos 8-19), incluidos
+explícitamente:
+
+- [ ] Dos llamadas concurrentes, misma key y contenido idéntico →
+  disparadas realmente en paralelo (`Promise.all`), una sola orden.
+- [ ] Misma key, mismo contenido, ítems en distinto orden → mismo
+  `request_hash`, mismo pedido.
+- [ ] Misma key, contenido distinto → rechazo.
+- [ ] Cambio de precio concurrente detectado dentro de la transacción
+  (forzar la carrera con dos conexiones/transacciones explícitas contra
+  la instancia de test).
+- [ ] Total en la base coincide con la suma real de `pedido_items`.
+- [ ] Array vacío, ítem duplicado, cantidad fuera de rango — los tres
+  rechazados sin bloquear ninguna fila de `viandas`.
+- [ ] `null`/`NaN`/`Infinity` rechazados en runtime (ya cubierto en
+  Task 2 como test unitario — acá se confirma que la Server Action
+  nunca llega a mandarlos a la función atómica en primer lugar).
+- [ ] Sexta solicitud bloqueada cuando el límite es 5 (contra la tabla
+  real).
+- [ ] Rotar la cookie de sesión no evade el límite real de IP.
+- [ ] Cron sin `CRON_SECRET` rechaza.
+- [ ] Fallo de purgado devuelve error, no reporta éxito.
+- [ ] Imposibilidad de leer `nota_admin` públicamente (spec de
+  Envíos/Puni).
+
+- [ ] **Commit**
+
+```bash
+git add app/pedido/actions.integration.test.ts
+git commit -m "test: add integration coverage for atomicity, rate limiting, and purge"
 ```
 
 ---
 
 ## Checklist de seguridad (repasar antes de pedir revisión)
 
-- [ ] Ningún camino de `anon`/`authenticated` puede insertar en
-  `pedidos`/`pedido_items` — confirmado por `select * from pg_policies
-  where tablename in ('pedidos','pedido_items') and cmd = 'INSERT'`
-  devolviendo cero filas, **y** por
-  `select has_function_privilege('anon', 'crear_pedido_atomico(...)',
-  'EXECUTE')` devolviendo `false`.
-- [ ] `crear_pedido_atomico` probado con un fallo forzado a mitad de
-  camino: cero filas residuales en `pedidos`.
-- [ ] `idempotency_key` reutilizada con contenido distinto: rechazada,
-  no sobrescribe.
-- [ ] El limitador de abuso corre antes de cualquier consulta a
-  `viandas`, y ninguna IP se guarda en texto plano
-  (`select telefono_comprador... ` no aplica acá — chequear
-  específicamente que `limite_solicitudes.clave` nunca contenga un
-  patrón de IP sin hashear, ej. con un test que intente insertar una IP
-  cruda y confirme que el código de aplicación nunca lo hace).
-- [ ] Una modalidad con costo `null` nunca resulta en un `pedidos` creado
-  — confirmado por test de integración, no solo por el filtro de la UI.
-- [ ] `generarPedido` filtra `viandas` por `vianderas_id` en la misma
-  query.
-- [ ] El total se recalcula server-side siempre.
-- [ ] `acepta_marketing` nunca se setea a `true` sin
-  `consentimiento_marketing_en` (constraint de base).
-- [ ] El teléfono del comprador nunca aparece en el mensaje de WhatsApp.
-- [ ] El cron de purgado corre automáticamente (`vercel.json` desplegado
-  y `CRON_SECRET` configurado) — **gate de publicación**: esta entrega
-  no está lista para producción hasta confirmar esto con una corrida real
-  del cron (o del gatillo manual) contra un pedido de prueba.
-- [ ] Ninguna transición de `pedidos.estado` fuera de la tabla de la spec
-  §11 es posible ni desde la Server Action ni escribiendo directo a la
-  tabla (RLS + trigger probados por separado).
+- [ ] `crear_pedido_atomico` bloquea (`FOR UPDATE`) las filas de
+  `viandas` involucradas **dentro** de su propia transacción — probado
+  con el test de carrera de la Task 10, no solo por lectura del código.
+- [ ] `select has_function_privilege('anon',
+  'crear_pedido_atomico(uuid,uuid,text,numeric,jsonb,text,text,text,boolean)',
+  'EXECUTE')` devuelve `false`.
+- [ ] Todos los `GRANT`/`REVOKE ... ON FUNCTION` de la migración incluyen
+  la firma completa de argumentos.
+- [ ] La migración fue **ejecutada realmente** contra un Postgres real
+  (Task 0/Task 1, Paso 3) — no solo revisada por lectura.
+- [ ] `request_hash` se calcula dentro de la función, ordenado por
+  `vianda_id`, nunca por un UUID de fila.
+- [ ] `hmacIp`/`hmacIpDesdeEnv` usan HMAC-SHA256 real con
+  `RATE_LIMIT_SECRET`, nunca concatenación + hash simple.
+- [ ] El límite global tiene un umbral alto (circuito de emergencia) —
+  confirmar que no puede activarse por el uso normal esperado del sitio.
+- [ ] `debeLimitar` usa `>`, no `>=` — la sexta solicitud (con límite 5)
+  es la primera bloqueada, no la quinta.
+- [ ] El cron rechaza explícitamente si `CRON_SECRET` está ausente o
+  vacío.
+- [ ] `ejecutarPurgado()` nunca reporta pedidos purgados si el `update`
+  falló.
+- [ ] `limite_solicitudes` tiene un mecanismo de limpieza de ventanas
+  vencidas (Task 9), no crece indefinidamente.
+- [ ] Ninguna prueba de integración corrió contra el proyecto de
+  producción de Supabase.
 
 ## QA responsive
 
-- [ ] Cajón de carrito: 375–1440px, sin scroll horizontal, controles de
-  cantidad ≥44px.
-- [ ] Pantalla de confirmación: formulario usable en 375px, checkbox de
-  marketing con área táctil clara y separada del botón de confirmar,
-  modalidades con costo `null` simplemente no aparecen en la lista (no
-  aparecen deshabilitadas con explicación — se recomienda confirmar con
-  el usuario en revisión visual si prefiere mostrarlas deshabilitadas
-  con un texto tipo "sin tarifa configurada" en vez de ocultarlas del
-  todo; la spec no cierra esa decisión de UX, solo el invariante de
-  backend).
-- [ ] Pantalla de revisión de cambios: legible en mobile.
-- [ ] Panel de pedidos en `/viandera`: lista usable en mobile y desktop.
+Sin cambios respecto a la versión anterior de este plan.
 
 ## Punto de detención
 
 **No ejecutar `git push`, merge, ni aplicar la migración hasta que Codex
-revise este plan.** Antes de la Task 0, confirmar con el usuario que
-instalar Supabase CLI/Docker para tests de integración es aceptable — es
-la única forma honesta de probar atomicidad, límites de tasa y RLS, pero
-es infraestructura nueva que el usuario no pidió explícitamente y merece
-su propio visto bueno. Al terminar, detenerse y reportar resultado de
-tests (unitarios e integración) y cualquier desvío.
+revise este plan.** La Task 0 (infraestructura de integración) requiere
+una decisión explícita del usuario (Docker local vs. staging) antes de
+poder ejecutar la verificación real de la migración (Task 1, Paso 3) y
+los tests de integración (Task 10) — sin eso, este plan no puede
+considerarse completamente verificado, más allá de la revisión de
+lectura del SQL. Al terminar lo que sí se puede completar sin esa
+decisión (Tasks 0 parcial, 2-9), detenerse y reportar exactamente qué
+quedó pendiente de la infraestructura de integración y por qué.

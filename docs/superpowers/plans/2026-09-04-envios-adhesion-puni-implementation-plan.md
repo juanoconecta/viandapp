@@ -5,15 +5,13 @@
 > `superpowers:executing-plans` para implementar tarea por tarea. Los pasos
 > usan sintaxis de checkbox (`- [ ]`).
 
-**Revisión correctiva 2026-09-04** sobre el commit `4196de3`: la tabla
-`puni_adhesiones` queda sin ninguna policy pública de SELECT — la
-superficie pública se sirve por consulta server-only, nunca por RLS/vista
-(Task 1, Task 7); el costo de Puni lo carga la vendedora, no el admin
-(Task 1 trigger, Task 3, Task 4, Task 5, Task 6); `modalidadesDisponibles`
-excluye cualquier modalidad con costo `null`, incluida `envio_propio` sin
-`costo_envio_propio` cargado (Task 2); TDD ampliado con los casos de
-imposibilidad de auto-aprobarse y de leer `nota_admin` públicamente
-(Task 8, nueva).
+**Segunda revisión correctiva 2026-09-04** sobre el commit `2ee4acc`:
+`puni_adhesiones` pasa a tener **RLS habilitado sin ninguna policy, para
+nadie** — se elimina el acceso directo de la vendedora a su propia fila
+(Task 1: se quitan las tres policies y el trigger de la revisión
+anterior). Toda lectura/escritura de la vendedora pasa por Server Actions
+que verifican propiedad en código y usan `createAdminClient()` con
+proyecciones explícitas (Task 3, Task 5).
 
 **Objetivo:** exponer retiro/envío propio (costo, cobertura) en el perfil
 de viandera, y un flujo de solicitud/aprobación de adhesión a Puni donde
@@ -21,15 +19,17 @@ el admin solo verifica y resuelve el estado — la vendedora configura el
 costo que cobra por esa modalidad.
 
 **Arquitectura:** dos columnas nuevas en `vianderas` + una tabla nueva
-`puni_adhesiones`, **totalmente privada** por RLS (ninguna policy para
-`anon`/`authenticated` más allá de "la vendedora ve/actualiza su propia
-fila"). La superficie pública (insignia, costo para el carrito) se sirve
-mediante una función server-only con `createAdminClient()` y un `select`
-explícito de columnas — nunca una vista ni policy pública.
+`puni_adhesiones` con RLS habilitado y **cero policies** — ni admin ni
+vendedora acceden vía RLS, todo pasa por `createAdminClient()` desde
+Server Actions que verifican ownership en código (mismo patrón que las
+tablas de CRM). Dos proyecciones server-only con columnas explícitas:
+`adhesionesAprobadas` (pública, para insignia/carrito) y
+`obtenerAdhesionPropia` (para la vendedora, sin `resuelto_por`/
+`resuelto_en`).
 
 **Tech Stack:** Next.js 16 App Router, Server Actions, Supabase Postgres +
-RLS, Vitest + Vitest de integración (ver Task 0 del plan de Carrito y
-pedidos, se reutiliza la misma infraestructura acá).
+RLS, Vitest + Vitest de integración (Task 0 del plan de Carrito y
+pedidos, reutilizada).
 
 **Spec:** `docs/superpowers/specs/2026-09-04-envios-adhesion-puni-design.md`
 
@@ -42,10 +42,13 @@ proyecto.
 
 - No tocar Supabase hasta que Codex revise este plan.
 - RLS habilitado en `puni_adhesiones` desde el `create table` mismo.
-  **Ninguna policy de SELECT para `anon`/`authenticated`** — la única
-  policy de select es "la vendedora ve su propia fila". Cero excepciones,
-  cero vistas públicas.
-- La vendedora NUNCA puede escribir `estado = 'aprobada'`.
+  **Cero policies, para nadie** — ni admin ni vendedora tienen un camino
+  de acceso vía RLS. Toda operación pasa por `createAdminClient()` desde
+  una Server Action que verificó ownership/autorización en código.
+- La vendedora NUNCA puede escribir `estado = 'aprobada'` — no hay
+  ningún camino de escritura directa desde su sesión bajo ninguna
+  circunstancia, ni siquiera restringido por trigger (no hace falta:
+  no hay RLS que bypasear).
 - El admin NUNCA escribe `costo_envio_puni` — ninguna Server Action de
   `app/admin/actions.ts` acepta ese campo como input.
 - Una modalidad con costo `null` (`costo_envio_propio` o
@@ -105,71 +108,16 @@ create table if not exists public.puni_adhesiones (
 );
 
 alter table public.puni_adhesiones enable row level security;
+-- Sin ninguna policy: ni admin ni vendedora acceden vía RLS. Toda
+-- operación pasa por createAdminClient() desde Server Actions que
+-- verifican ownership/autorización en código (Task 3, Task 5). No hace
+-- falta un trigger de validación de update: no hay ningún camino de
+-- escritura directa que ese trigger tuviera que defender.
 
 drop trigger if exists puni_adhesiones_set_updated_at on public.puni_adhesiones;
 create trigger puni_adhesiones_set_updated_at
 before update on public.puni_adhesiones
 for each row execute function public.viandapp_set_updated_at();
-
--- Dos casos válidos para sesiones sin service role: (1) re-solicitar tras
--- rechazo/revocación, (2) actualizar costo_envio_puni mientras aprobada.
--- Cualquier otra cosa (incluido cualquier intento de escribir 'aprobada')
--- se rechaza. El admin (service_role) no pasa por acá.
-create or replace function public.puni_adhesiones_validar_update_vendedora()
-returns trigger language plpgsql as $$
-begin
-  if current_setting('role', true) = 'service_role' then
-    return new;
-  end if;
-
-  if old.estado in ('rechazada', 'revocada') and new.estado = 'pendiente' then
-    if new.costo_envio_puni is distinct from old.costo_envio_puni
-       or new.nota_admin is distinct from old.nota_admin
-       or new.resuelto_por is distinct from old.resuelto_por
-       or new.resuelto_en is distinct from old.resuelto_en then
-      raise exception 'al re-solicitar solo se puede cambiar el estado';
-    end if;
-    return new;
-  end if;
-
-  if old.estado = 'aprobada' and new.estado = 'aprobada' then
-    if new.nota_admin is distinct from old.nota_admin
-       or new.resuelto_por is distinct from old.resuelto_por
-       or new.resuelto_en is distinct from old.resuelto_en
-       or new.viandera_id is distinct from old.viandera_id then
-      raise exception 'solo se puede actualizar el costo de envio';
-    end if;
-    return new;
-  end if;
-
-  raise exception 'transicion no permitida para esta sesion';
-end;
-$$;
-
-drop trigger if exists puni_adhesiones_validar_update on public.puni_adhesiones;
-create trigger puni_adhesiones_validar_update
-before update on public.puni_adhesiones
-for each row execute function public.puni_adhesiones_validar_update_vendedora();
-
-create policy "viandera ve su propia adhesion"
-  on public.puni_adhesiones for select
-  using (viandera_id in (select id from public.vianderas where user_id = auth.uid()));
-
-create policy "viandera solicita adhesion"
-  on public.puni_adhesiones for insert
-  with check (
-    viandera_id in (select id from public.vianderas where user_id = auth.uid())
-    and estado = 'pendiente'
-    and costo_envio_puni is null
-    and resuelto_por is null
-  );
-
-create policy "viandera actualiza su propia adhesion"
-  on public.puni_adhesiones for update
-  using (viandera_id in (select id from public.vianderas where user_id = auth.uid()));
-
--- Deliberadamente sin ninguna policy de select para anon/authenticated.
--- No hay vista pública. Ver Task 7 para la superficie pública server-only.
 
 commit;
 ```
@@ -356,27 +304,125 @@ git commit -m "feat: add pure shipping-modality logic that excludes null-cost op
 
 ---
 
-### Task 3: Server Actions de vendedora (solicitar adhesión, configurar costo, guardar envío)
+### Task 3: `lib/envios/adhesionPropia.ts` + Server Actions de vendedora
 
 **Files:**
+- Create: `lib/envios/adhesionPropia.ts`, `lib/envios/adhesionPropia.test.ts`
 - Modify: `app/viandera/actions.ts` (extender `actualizarPerfil`, agregar
-  `solicitarAdhesionPuni` y **`actualizarCostoEnvioPuni`**, nueva en esta
-  revisión)
+  `obtenerEstadoAdhesionPropia`, `solicitarAdhesionPuni`,
+  `actualizarCostoEnvioPuni` — **las tres reescritas en esta revisión
+  para usar `createAdminClient()` con verificación de ownership en
+  código, ya que no hay más RLS que las respalde**)
 
 **Interfaces:**
 - Consume: `transicionValida` (Task 2).
 
 - [ ] **Paso 1: Extender `actualizarPerfil`** — sin cambios respecto a la
-  versión anterior de este plan.
+  versión anterior de este plan (sigue usando `createClient()`/RLS
+  normal — `vianderas` no cambió su modelo de acceso).
 
-- [ ] **Paso 2: `solicitarAdhesionPuni`** — sin cambios respecto a la
-  versión anterior de este plan (sigue usando `createClient()`, no
-  `createAdminClient()` — la RLS ya garantiza que solo llega a
-  `pendiente`).
-
-- [ ] **Paso 3: `actualizarCostoEnvioPuni`** (nueva)
+- [ ] **Paso 2: `adhesionPropia.ts`**
 
 ```ts
+// lib/envios/adhesionPropia.ts
+import "server-only";
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { EstadoAdhesionPuni } from "./transiciones";
+
+export type EstadoAdhesionVendedora = {
+  estado: EstadoAdhesionPuni;
+  costoEnvioPuni: number | null;
+  notaAdmin: string | null;
+};
+
+export async function obtenerAdhesionPropia(
+  vianderaId: string,
+): Promise<EstadoAdhesionVendedora | null> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("puni_adhesiones")
+    .select("estado, costo_envio_puni, nota_admin")
+    .eq("viandera_id", vianderaId)
+    .maybeSingle();
+  if (!data) return null;
+  return {
+    estado: data.estado,
+    costoEnvioPuni: data.costo_envio_puni,
+    notaAdmin: data.nota_admin,
+  };
+}
+```
+
+- [ ] **Paso 3: Test de `adhesionPropia.ts`** — el resultado nunca tiene
+  una clave `resuelto_por` ni `resuelto_en` (recorrer `Object.keys`,
+  comparar contra `{estado, costoEnvioPuni, notaAdmin}` exacto).
+
+- [ ] **Paso 4: `obtenerEstadoAdhesionPropia`, `solicitarAdhesionPuni`,
+  `actualizarCostoEnvioPuni`** — las tres siguen el mismo patrón: resolver
+  identidad, resolver `vianderaId` propio, y recién ahí usar
+  `createAdminClient()`.
+
+```ts
+async function resolverVianderaPropia(): Promise<
+  { ok: true; vianderaId: string } | { ok: false; mensaje: string }
+> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, mensaje: "No autenticado." };
+
+  const { data: viandera } = await supabase
+    .from("vianderas")
+    .select("id")
+    .eq("user_id", user.id)
+    .single();
+  if (!viandera) return { ok: false, mensaje: "No encontramos tu cocina." };
+
+  return { ok: true, vianderaId: viandera.id };
+}
+
+export async function obtenerEstadoAdhesionPropia(): Promise<EstadoAdhesionVendedora | null> {
+  const propia = await resolverVianderaPropia();
+  if (!propia.ok) return null;
+  return obtenerAdhesionPropia(propia.vianderaId);
+}
+
+export type ResultadoSolicitudAdhesion =
+  | { status: "idle" }
+  | { status: "error"; mensaje: string }
+  | { status: "ok" };
+
+export async function solicitarAdhesionPuni(
+  _prevState: ResultadoSolicitudAdhesion,
+  _formData: FormData,
+): Promise<ResultadoSolicitudAdhesion> {
+  const propia = await resolverVianderaPropia();
+  if (!propia.ok) return { status: "error", mensaje: propia.mensaje };
+
+  const admin = createAdminClient();
+  const existente = await obtenerAdhesionPropia(propia.vianderaId);
+
+  if (!existente) {
+    const { error } = await admin
+      .from("puni_adhesiones")
+      .insert({ viandera_id: propia.vianderaId, estado: "pendiente" });
+    if (error) return { status: "error", mensaje: "No pudimos enviar la solicitud." };
+    revalidatePath("/viandera/perfil");
+    return { status: "ok" };
+  }
+
+  if (!transicionValida(existente.estado, "pendiente", "viandera")) {
+    return { status: "error", mensaje: "No podés volver a solicitar desde el estado actual." };
+  }
+
+  const { error } = await admin
+    .from("puni_adhesiones")
+    .update({ estado: "pendiente" })
+    .eq("viandera_id", propia.vianderaId);
+  if (error) return { status: "error", mensaje: "No pudimos reenviar la solicitud." };
+  revalidatePath("/viandera/perfil");
+  return { status: "ok" };
+}
+
 export type ResultadoActualizarCostoPuni =
   | { status: "idle" }
   | { status: "error"; mensaje: string }
@@ -386,24 +432,11 @@ export async function actualizarCostoEnvioPuni(
   _prevState: ResultadoActualizarCostoPuni,
   formData: FormData,
 ): Promise<ResultadoActualizarCostoPuni> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { status: "error", mensaje: "No autenticado." };
+  const propia = await resolverVianderaPropia();
+  if (!propia.ok) return { status: "error", mensaje: propia.mensaje };
 
-  const { data: viandera } = await supabase
-    .from("vianderas")
-    .select("id")
-    .eq("user_id", user.id)
-    .single();
-  if (!viandera) return { status: "error", mensaje: "No encontramos tu cocina." };
-
-  const { data: adhesion } = await supabase
-    .from("puni_adhesiones")
-    .select("estado")
-    .eq("viandera_id", viandera.id)
-    .maybeSingle();
-
-  if (adhesion?.estado !== "aprobada") {
+  const actual = await obtenerAdhesionPropia(propia.vianderaId);
+  if (actual?.estado !== "aprobada") {
     return { status: "error", mensaje: "Tu adhesión todavía no está aprobada." };
   }
 
@@ -413,13 +446,11 @@ export async function actualizarCostoEnvioPuni(
     return { status: "error", mensaje: "Costo inválido." };
   }
 
-  // Vía RLS (createClient, no admin) — el trigger de la Task 1 ya
-  // garantiza que esta sesión, sin ser service_role, solo puede tocar
-  // costo_envio_puni mientras estado sigue en 'aprobada'.
-  const { error } = await supabase
+  const admin = createAdminClient();
+  const { error } = await admin
     .from("puni_adhesiones")
-    .update({ costo_envio_puni: costo, estado: "aprobada" })
-    .eq("viandera_id", viandera.id);
+    .update({ costo_envio_puni: costo })
+    .eq("viandera_id", propia.vianderaId);
 
   if (error) return { status: "error", mensaje: "No pudimos guardar el costo." };
   revalidatePath("/viandera/perfil");
@@ -427,22 +458,22 @@ export async function actualizarCostoEnvioPuni(
 }
 ```
 
-Nota: `estado: "aprobada"` se reenvía sin cambio en el `update` a
-propósito — el trigger de la Task 1 compara `old.estado = new.estado =
-'aprobada'` para permitir el caso 2; omitir el campo dejaría a Supabase
-sin tocarlo (lo cual también sería válido), pero enviarlo explícito hace
-la intención legible en el código.
+  Nota: `resolverVianderaPropia` **siempre** resuelve el `vianderaId`
+  del usuario autenticado — ninguna de estas tres funciones acepta un
+  `vianderaId` como parámetro externo, así que no existe ningún request
+  que pueda operar sobre la fila de otra vendedora.
 
-- [ ] **Paso 4: Tests** — sin usuario autenticado devuelve error; sin
-  adhesión aprobada devuelve error sin intentar el update (mock que
-  falla si se invoca); costo negativo o no numérico rechazado antes de
-  tocar la base.
+- [ ] **Paso 5: Tests** — sin usuario autenticado devuelve error sin
+  llamar `createAdminClient` (spy); sin adhesión aprobada,
+  `actualizarCostoEnvioPuni` devuelve error sin intentar el `update`;
+  `solicitarAdhesionPuni` con una adhesión `aprobada` existente rechaza
+  (transición inválida) sin escribir.
 
-- [ ] **Paso 5: Commit**
+- [ ] **Paso 6: Commit**
 
 ```bash
-git add app/viandera/actions.ts app/viandera/actions.test.ts
-git commit -m "feat: let sellers request Puni adhesion and set their own Puni shipping cost"
+git add lib/envios/adhesionPropia.ts lib/envios/adhesionPropia.test.ts app/viandera/actions.ts app/viandera/actions.test.ts
+git commit -m "feat: replace direct RLS access with ownership-checked server actions for Puni adhesion"
 ```
 
 ---
@@ -515,11 +546,13 @@ export async function resolverAdhesionPuni(
 
 - [ ] **Paso 3: Test de integración (Task 0 del plan de Carrito) —
   imposibilidad de auto-aprobarse**: con un cliente autenticado como la
-  vendedora (no `service_role`), un `update` directo a `puni_adhesiones`
-  intentando `estado = 'aprobada'` (desde `pendiente` o desde cualquier
-  otro estado) debe fallar por el trigger de la Task 1 — no alcanza con
-  probarlo solo a través de la Server Action, hay que confirmar que la
-  base lo rechaza aunque alguien bypasee la Server Action por completo.
+  vendedora (`authenticated`, no `service_role`), **cualquier**
+  `update`/`insert`/`select` directo contra `puni_adhesiones` debe
+  fallar o devolver cero filas — no hay ninguna policy de RLS que dé
+  acceso a nadie salvo `service_role`, así que no hace falta un trigger
+  que valide "qué transición es válida para esta sesión": la sesión no
+  tiene acceso de tabla en absoluto. El test confirma esa ausencia total
+  de acceso, no un caso límite de una policy.
 
 - [ ] **Paso 4: Commit**
 
@@ -540,8 +573,14 @@ git commit -m "feat: add admin action to resolve Puni adhesion requests without 
 - Modify: `app/viandera/perfil/page.tsx`
 
 **Interfaces:**
-- Consume: `actualizarPerfil` extendido, `solicitarAdhesionPuni`,
-  `actualizarCostoEnvioPuni` (Task 3).
+- Consume: `actualizarPerfil` extendido, `obtenerEstadoAdhesionPropia`,
+  `solicitarAdhesionPuni`, `actualizarCostoEnvioPuni` (Task 3).
+
+- [ ] **Paso 0 (nuevo en esta revisión): `app/viandera/perfil/page.tsx`
+  ya no consulta `puni_adhesiones` con un cliente Supabase autenticado
+  (no hay RLS que se lo permita) — llama
+  `obtenerEstadoAdhesionPropia()` (Server Action de Task 3) y pasa el
+  resultado como prop a los componentes de esta página.
 
 - [ ] **Paso 1: Campos de retiro/envío propio** — sin cambios respecto a
   la versión anterior de este plan, con una aclaración de copy: el campo
@@ -685,25 +724,23 @@ git commit -m "feat: show public Puni adhesion badge via a server-only, column-l
 ## Checklist de seguridad (repasar antes de pedir revisión)
 
 - [ ] `select * from pg_policies where tablename = 'puni_adhesiones'`
-  muestra únicamente las tres policies de la vendedora (select propia,
-  insert propia, update propia) — **cero** policies para `anon` o con
-  `to authenticated` sin scoping por `user_id`.
-- [ ] Ninguna vista pública existe sobre `puni_adhesiones` (`select *
-  from information_schema.views where table_name like 'puni%'` no debe
-  devolver nada, o si algo existe, confirmar que no es accesible por
-  `anon`).
-- [ ] Trigger `puni_adhesiones_validar_update_vendedora` probado con test
-  de integración, no solo confiado por lectura del código: (a) intento de
-  auto-aprobarse falla, (b) actualizar costo mientras aprobada funciona y
-  no permite colar un cambio a `nota_admin` en la misma operación.
+  devuelve **cero filas** — ni admin ni vendedora tienen ninguna policy,
+  la tabla es 100% `service_role`-only.
+- [ ] Ninguna vista pública existe sobre `puni_adhesiones`.
+- [ ] Test de integración confirma que una sesión `authenticated` (la
+  propia vendedora dueña de una fila, o cualquier otra) no puede leer ni
+  escribir la tabla directamente, bajo ninguna operación.
 - [ ] `resolverAdhesionPuni` (admin) no acepta ni procesa
   `costoEnvioPuni` en ningún branch del código.
 - [ ] `actualizarCostoEnvioPuni` (vendedora) rechaza si la adhesión no
-  está `aprobada`, antes de cualquier intento de `update`.
+  está `aprobada`, antes de cualquier intento de `update` — y resuelve
+  el `vianderaId` siempre del usuario autenticado, nunca de un parámetro
+  externo.
+- [ ] `obtenerAdhesionPropia` nunca devuelve `resuelto_por` ni
+  `resuelto_en` (confirmado por el test de la Task 3, Paso 3).
 - [ ] `lib/envios/adhesionPublica.ts` es el único lugar del código que
   lee `puni_adhesiones` para propósito público, y su `select` nunca pide
-  `nota_admin`/`resuelto_por`/`resuelto_en`/`estado` real (confirmado por
-  el test del Paso 2 de la Task 7).
+  `nota_admin`/`resuelto_por`/`resuelto_en`/`estado` real.
 - [ ] `costo_envio_propio`/`costo_envio_puni` tienen `check (>= 0)`.
 - [ ] Ningún dato de Puni (nombre, condiciones) se inventa en la UI —
   el costo lo carga la vendedora después de acordarlo con Puni fuera de

@@ -3,89 +3,92 @@
 > **Para ejecutores agénticos:** REQUIERE SUB-SKILL:
 > `superpowers:subagent-driven-development` o `superpowers:executing-plans`.
 
-**Revisión correctiva 2026-09-04** sobre el commit `4196de3`:
-`crm_contactos.pedido_id` eliminado, reemplazado por `crm_contacto_pedidos`
-(Task 1) — un consumidor puede tener muchos pedidos; altas idempotentes
-explícitas de verdad, no solo "fallan prolijamente" (Task 3); un trigger
-nuevo sobre `pedidos` vincula automáticamente un consumidor al CRM **solo**
-cuando dio consentimiento de marketing, con copia durable de nombre/
-contacto en ese caso (Task 1, Task 5 nueva); TDD ampliado con el caso de
-un contacto relacionado con varios pedidos (Task 6 nueva).
+**Segunda revisión correctiva 2026-09-04** sobre el commit `2ee4acc`:
+interesados/cocinas se sincronizan automáticamente vía trigger (Task 1,
+Task 5 — ya no manual); deduplicación de consumidores por
+`contacto_normalizado` (teléfono/email normalizado), no por texto crudo
+(Task 1, Task 2); retiro de consentimiento y anonimización de PII
+comercial (Task 1, Task 3 nueva); `vincularPedidoManualmente` corregida
+para nunca poder crear una copia durable sin consentimiento (Task 3);
+TDD ampliado con teléfonos equivalentes y exclusión por retiro de
+consentimiento (Task 6).
 
-**Objetivo:** panel admin-only para contactos (cocinas potenciales/activas,
-consumidores identificados con consentimiento de marketing, aliados),
-notas, tareas e historial de interacciones, vinculado a las tablas
-especializadas sin duplicarlas — salvo la excepción explícita y
-justificada de §2/§9 de la spec.
+**Objetivo:** panel admin-only para contactos (cocinas potenciales/
+activas sincronizadas automáticamente, consumidores identificados con
+consentimiento de marketing, aliados), con retiro de consentimiento y
+anonimización disponibles.
 
-**Arquitectura:** cinco tablas nuevas, RLS habilitado sin ninguna policy
-para `anon`/`authenticated`. Una vista de lectura (`crm_contactos_resumen`)
-resuelve el nombre/contacto por `coalesce` entre las tablas
-especializadas, los campos libres, y (como último recurso) el pedido más
-reciente vinculado. Un trigger sobre `pedidos` (agregado por esta
-migración, no por la de Carrito y pedidos) automatiza el único caso donde
-la automatización está justificada: consentimiento de marketing.
+**Arquitectura:** cinco tablas, RLS sin policies. Triggers sobre
+`interesados_viandera`, `vianderas` y `pedidos` (todas ya existentes,
+agregados por esta migración — ningún otro plan necesita saber que el
+CRM existe) sincronizan automáticamente, con distinta base legal cada
+uno: interesados/cocinas no tienen restricción de consentimiento
+(dieron sus datos directamente para ese propósito); consumidores solo se
+vinculan con copia durable si dieron consentimiento de marketing,
+deduplicados por contacto normalizado.
 
 **Tech Stack:** Next.js 16 App Router, Server Actions, Supabase Postgres +
 RLS + PL/pgSQL, Vitest + Vitest de integración (Task 0 del plan de
-Carrito y pedidos, reutilizada).
+Carrito y pedidos).
 
 **Spec:** `docs/superpowers/specs/2026-09-04-crm-viandapp-design.md`
 
 **Requiere PRIMERO:**
-1. Plan de Carrito y pedidos implementado y su migración aplicada (la
-   tabla `pedidos` debe existir — este plan agrega un trigger sobre ella,
-   pero el plan de Carrito y pedidos no necesita saber nada de CRM).
+1. Plan de Carrito y pedidos implementado y aplicado.
 2. Preflight de backup de Supabase.
-
-Este plan se implementa **último** de los cuatro deliberadamente — ver
-"Orden recomendado de implementación" en el reporte final.
 
 ## Global Constraints
 
 - No tocar Supabase hasta revisión de Codex.
-- RLS habilitado en las 5 tablas desde el `create table`, sin ninguna
-  policy para `anon`/`authenticated`. Todo pasa por `esAdmin()` +
-  `createAdminClient()`.
-- Nunca copiar `nombre`/`telefono`/`contacto` de `vianderas`/
-  `interesados_viandera` — siempre `join`/`coalesce` en el momento de
-  lectura. La única excepción es la copia durable de un consumidor
-  **con consentimiento de marketing** (Task 1, Task 5) — justificada por
-  separado en la spec §2/§9, no una relajación general del principio.
-- Un `viandera_id`/`interesado_id` dado tiene a lo sumo un
-  `crm_contactos` (índices únicos parciales).
-- Un `contacto_libre` de tipo `consumidor` también es único (índice
-  parcial nuevo) — así el trigger de consentimiento consolida pedidos
-  repetidos del mismo comprador en un solo contacto en vez de crear uno
-  por compra.
-- Ninguna automatización crea `crm_contactos` para cocinas/interesados —
-  eso sigue siendo 100% manual. La única automatización de esta entrega
-  es el trigger de consentimiento de marketing sobre `pedidos`.
+- RLS habilitado en las 5 tablas, sin ninguna policy.
+- Deduplicación de consumidores por `contacto_normalizado`
+  (teléfono/email normalizado, columna generada), **nunca** por
+  `contacto_libre` crudo.
+- Interesados y cocinas activas se sincronizan **automática e
+  idempotentemente** al CRM — no depende de que el admin recuerde un
+  botón.
+- Consumidores solo obtienen copia durable de PII con consentimiento de
+  marketing explícito (`pedidos.acepta_marketing = true`) — **bajo
+  ninguna circunstancia**, ni siquiera manualmente por el admin, un
+  pedido sin ese consentimiento puede generar una ficha comercial
+  durable.
+- El retiro de consentimiento excluye de inmediato de cualquier acción
+  comercial futura, y puede ir acompañado de anonimización de la PII
+  conservando las relaciones operativas (`crm_contacto_pedidos`).
 - Sin nuevas dependencias de npm.
-- Todas las funciones puras de negocio llevan TDD. Las garantías que
-  dependen de un trigger de Postgres llevan test de integración.
+- Todas las funciones puras llevan TDD. Las garantías de trigger llevan
+  test de integración.
 
 ---
 
-### Task 1: Migración — cinco tablas, trigger de consentimiento, vista de resumen
+### Task 1: Migración — tablas, normalización, tres triggers de sincronización, retiro de consentimiento
 
 **Files:**
 - Create: `supabase/migrations/202609040003_crm.sql`
-- Modify: `types/index.ts` (agregar `CrmContacto`, `CrmContactoPedido`,
-  `CrmNota`, `CrmTarea`, `CrmInteraccion` y sus entradas en
-  `Database.public.Tables`)
+- Modify: `types/index.ts`
 
 - [ ] **Paso 1: Escribir la migración**
 
 ```sql
--- CRM interno: contactos vinculados (no copiados, salvo la excepción de
--- consentimiento de marketing) a tablas especializadas, notas, tareas,
--- historial de interacciones. Admin-only por RLS. Aditiva, repetible,
--- transaccional. Agrega un trigger sobre la tabla `pedidos` ya existente
--- (creada por el plan de Carrito y pedidos) — ese plan no necesita saber
--- nada de esto.
+-- CRM interno. Interesados/cocinas se sincronizan automaticamente
+-- (triggers sobre interesados_viandera/vianderas). Consumidores solo con
+-- consentimiento de marketing, deduplicados por contacto normalizado
+-- (no texto crudo). Retiro de consentimiento y anonimizacion incluidos.
+-- RLS sin policies. Aditiva, repetible, transaccional.
 
 begin;
+
+create or replace function public.crm_normalizar_contacto(p_tipo text, p_contacto_libre text)
+returns text
+language sql
+immutable
+as $$
+  select case
+    when p_contacto_libre is null then null
+    when p_contacto_libre like '%@%' then lower(trim(p_contacto_libre))
+    else regexp_replace(p_contacto_libre, '[^0-9]', '', 'g')
+  end;
+$$;
 
 create table if not exists public.crm_contactos (
   id uuid primary key default gen_random_uuid(),
@@ -95,11 +98,14 @@ create table if not exists public.crm_contactos (
   interesado_id uuid references public.interesados_viandera(id) on delete set null,
   nombre_libre text,
   contacto_libre text,
+  contacto_normalizado text generated always as (public.crm_normalizar_contacto(tipo, contacto_libre)) stored,
   fuente text not null
     check (fuente in ('landing_interes', 'explorador', 'pedido', 'referido', 'contacto_directo', 'otro')),
   estado text not null
     check (estado in ('nuevo', 'en_conversacion', 'calificado', 'activo', 'inactivo', 'descartado')),
   etiquetas text[] not null default '{}',
+  consentimiento_retirado_en timestamptz,
+  pii_eliminada boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint crm_contactos_un_solo_vinculo check (
@@ -115,11 +121,9 @@ create unique index if not exists crm_contactos_viandera_unico
   on public.crm_contactos (viandera_id) where viandera_id is not null;
 create unique index if not exists crm_contactos_interesado_unico
   on public.crm_contactos (interesado_id) where interesado_id is not null;
--- Consolida pedidos repetidos del mismo comprador (mismo contacto_libre)
--- en un unico contacto de tipo consumidor.
 create unique index if not exists crm_contactos_consumidor_unico
-  on public.crm_contactos (tipo, contacto_libre)
-  where tipo = 'consumidor' and contacto_libre is not null;
+  on public.crm_contactos (tipo, contacto_normalizado)
+  where tipo = 'consumidor' and contacto_normalizado is not null;
 
 create table if not exists public.crm_contacto_pedidos (
   contacto_id uuid not null references public.crm_contactos(id) on delete cascade,
@@ -166,15 +170,48 @@ alter table public.crm_contacto_pedidos enable row level security;
 alter table public.crm_notas enable row level security;
 alter table public.crm_tareas enable row level security;
 alter table public.crm_interacciones enable row level security;
--- Deliberadamente sin ninguna policy en las 5 tablas.
+-- Sin ninguna policy en las 5 tablas.
 
 drop trigger if exists crm_contactos_set_updated_at on public.crm_contactos;
 create trigger crm_contactos_set_updated_at
 before update on public.crm_contactos
 for each row execute function public.viandapp_set_updated_at();
 
--- Auto-vincula un pedido al CRM SOLO si dio consentimiento de marketing,
--- con copia durable de nombre/contacto (justificado en la spec §2/§9).
+-- Sincronizacion automatica: interesados de la landing (corregido en
+-- esta revision, antes era manual).
+create or replace function public.crm_sincronizar_interesado()
+returns trigger language plpgsql as $$
+begin
+  insert into public.crm_contactos (tipo, interesado_id, fuente, estado)
+  values ('cocina_potencial', new.id, 'landing_interes', 'nuevo')
+  on conflict (interesado_id) where interesado_id is not null do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists crm_sincronizar_interesado_trigger on public.interesados_viandera;
+create trigger crm_sincronizar_interesado_trigger
+after insert on public.interesados_viandera
+for each row execute function public.crm_sincronizar_interesado();
+
+-- Sincronizacion automatica: cocinas activas (corregido, antes manual).
+create or replace function public.crm_sincronizar_viandera()
+returns trigger language plpgsql as $$
+begin
+  insert into public.crm_contactos (tipo, viandera_id, fuente, estado)
+  values ('cocina_activa', new.id, 'contacto_directo', 'nuevo')
+  on conflict (viandera_id) where viandera_id is not null do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists crm_sincronizar_viandera_trigger on public.vianderas;
+create trigger crm_sincronizar_viandera_trigger
+after insert on public.vianderas
+for each row execute function public.crm_sincronizar_viandera();
+
+-- Consumidores: solo con consentimiento de marketing, deduplicados por
+-- contacto_normalizado (corregido -- antes era contacto_libre crudo).
 create or replace function public.crm_vincular_pedido_consentido()
 returns trigger language plpgsql as $$
 declare
@@ -186,8 +223,8 @@ begin
 
   insert into public.crm_contactos (tipo, nombre_libre, contacto_libre, fuente, estado)
   values ('consumidor', new.nombre_comprador, new.telefono_comprador, 'pedido', 'nuevo')
-  on conflict (tipo, contacto_libre) where tipo = 'consumidor' and contacto_libre is not null
-  do update set nombre_libre = excluded.nombre_libre
+  on conflict (tipo, contacto_normalizado) where tipo = 'consumidor' and contacto_normalizado is not null
+  do update set nombre_libre = excluded.nombre_libre, contacto_libre = excluded.contacto_libre
   returning id into v_contacto_id;
 
   insert into public.crm_contacto_pedidos (contacto_id, pedido_id)
@@ -211,6 +248,8 @@ select
   c.fuente,
   c.estado,
   c.etiquetas,
+  c.consentimiento_retirado_en,
+  c.pii_eliminada,
   c.created_at,
   c.updated_at,
   coalesce(v.nombre, i.nombre, c.nombre_libre, ultimo_pedido.nombre_comprador) as nombre,
@@ -232,93 +271,79 @@ left join lateral (
 commit;
 ```
 
-- [ ] **Paso 2: Actualizar `types/index.ts`** con los cinco tipos nuevos
-  (incluido `CrmContactoPedido`) y sus entradas en `Database`.
+- [ ] **Paso 2: Actualizar `types/index.ts`** con los tipos nuevos,
+  incluyendo `contacto_normalizado`, `consentimiento_retirado_en`,
+  `pii_eliminada` en `CrmContacto`.
 
 - [ ] **Paso 3: Commit**
 
 ```bash
 git add supabase/migrations/202609040003_crm.sql types/index.ts
-git commit -m "feat: add CRM tables, marketing-consent auto-link trigger, and summary view"
+git commit -m "feat: auto-sync leads/kitchens, normalize consumer dedup, add consent withdrawal"
 ```
 
 ---
 
-### Task 2: Funciones puras de negocio (TDD)
+### Task 2: Funciones puras — vínculo y normalización (TDD)
 
 **Files:**
-- Create: `lib/crm/vinculo.ts`
-- Create: `lib/crm/vinculo.test.ts`
+- Create: `lib/crm/vinculo.ts`, `lib/crm/vinculo.test.ts`
+- Create: `lib/crm/normalizarContacto.ts`, `lib/crm/normalizarContacto.test.ts`
 
-**Interfaces:**
-- Produce: `validarVinculo` — consumido por Task 3.
+- [ ] **Paso 1-4: `validarVinculo`** — sin cambios respecto a la versión
+  anterior de este plan.
 
-- [ ] **Paso 1: Test de `validarVinculo` (falla primero)** — corregido:
-  ya no acepta `pedidoId` como vínculo (ese caso pasó a
-  `crm_contacto_pedidos`, fuera del alcance de esta función).
+- [ ] **Paso 5: Test de `normalizarContacto` (falla primero)** —
+  implementación TypeScript equivalente a la función SQL de la Task 1,
+  con un set de casos compartido para poder confirmar que ambas
+  producen el mismo resultado (riesgo de duplicación de lógica,
+  reconocido en la spec §9):
 
 ```ts
-// lib/crm/vinculo.test.ts
+// lib/crm/normalizarContacto.test.ts
 import { describe, expect, it } from "vitest";
-import { validarVinculo } from "./vinculo";
+import { normalizarContacto } from "./normalizarContacto";
 
-describe("validarVinculo", () => {
-  it("valido con un solo vinculo seteado", () => {
-    expect(validarVinculo({ vianderaId: "v1" })).toEqual({ valido: true });
-    expect(validarVinculo({ interesadoId: "i1" })).toEqual({ valido: true });
+describe("normalizarContacto", () => {
+  it("telefonos con formato distinto normalizan al mismo valor", () => {
+    expect(normalizarContacto("3548 635151")).toBe(normalizarContacto("+54 9 3548-635151"));
+    expect(normalizarContacto("(3548) 635-151")).toBe(normalizarContacto("3548635151"));
   });
 
-  it("valido sin ningun vinculo si hay nombreLibre", () => {
-    expect(validarVinculo({ nombreLibre: "Puni Rafaela" })).toEqual({ valido: true });
+  it("emails normalizan a minusculas sin espacios", () => {
+    expect(normalizarContacto(" Maria@Ejemplo.com ")).toBe("maria@ejemplo.com");
   });
 
-  it("invalido con mas de un vinculo seteado", () => {
-    expect(validarVinculo({ vianderaId: "v1", interesadoId: "i1" }).valido).toBe(false);
-  });
-
-  it("invalido sin ningun vinculo y sin nombreLibre", () => {
-    expect(validarVinculo({}).valido).toBe(false);
+  it("null devuelve null", () => {
+    expect(normalizarContacto(null)).toBeNull();
   });
 });
 ```
 
-- [ ] **Paso 2: Implementación mínima**
+- [ ] **Paso 6: Implementación — mismo criterio que la función SQL
+  (extraer solo dígitos si no hay `@`, minúsculas+trim si lo hay)**
 
 ```ts
-// lib/crm/vinculo.ts
-export type VinculoContacto = {
-  vianderaId?: string;
-  interesadoId?: string;
-  nombreLibre?: string;
-};
-
-export function validarVinculo(
-  vinculo: VinculoContacto,
-): { valido: true } | { valido: false; motivo: string } {
-  const cantidadVinculos = [vinculo.vianderaId, vinculo.interesadoId].filter(Boolean).length;
-
-  if (cantidadVinculos > 1) {
-    return { valido: false, motivo: "Un contacto solo puede vincularse a una tabla especializada." };
-  }
-  if (cantidadVinculos === 0 && !vinculo.nombreLibre) {
-    return { valido: false, motivo: "Sin vínculo, hace falta un nombre." };
-  }
-  return { valido: true };
+// lib/crm/normalizarContacto.ts
+export function normalizarContacto(contactoLibre: string | null): string | null {
+  if (contactoLibre === null) return null;
+  if (contactoLibre.includes("@")) return contactoLibre.trim().toLowerCase();
+  return contactoLibre.replace(/[^0-9]/g, "");
 }
 ```
 
-- [ ] **Paso 3: Correr tests, confirmar que pasan.**
+- [ ] **Paso 7: Correr tests, confirmar que pasan.**
 
-- [ ] **Paso 4: Commit**
+- [ ] **Paso 8: Commit**
 
 ```bash
-git add lib/crm/
-git commit -m "feat: add pure CRM contact-link validation with tests"
+git add lib/crm/vinculo.ts lib/crm/vinculo.test.ts lib/crm/normalizarContacto.ts lib/crm/normalizarContacto.test.ts
+git commit -m "feat: add pure contact-link validation and contact normalization with tests"
 ```
 
 ---
 
-### Task 3: Server Actions de CRM — altas idempotentes
+### Task 3: Server Actions — altas, retiro de consentimiento, anonimización
 
 **Files:**
 - Create: `app/admin/crm/actions.ts`
@@ -326,171 +351,199 @@ git commit -m "feat: add pure CRM contact-link validation with tests"
 **Interfaces:**
 - Consume: `esAdmin`, `createAdminClient`, `validarVinculo` (Task 2).
 
-- [ ] **Paso 1: `crearContacto`** (corregido: idempotente de verdad, no
-  solo "falla prolijamente")
+- [ ] **Paso 1: `crearContacto`** — sin cambios respecto a la versión
+  anterior de este plan (idempotente vía `on conflict do nothing` +
+  `select` de respaldo). Ya no hace falta usarla para interesados/
+  vianderas (ahora automático, Task 1) — queda para el caso "aliado
+  estratégico" (`nombreLibre`, sin FK) y para vincular manualmente un
+  pedido no consentido (ver Paso 3).
+
+- [ ] **Paso 2: `actualizarEstadoContacto`** — sin cambios.
+
+- [ ] **Paso 3: `vincularPedidoManualmente`** (corregida en esta
+  revisión — **nunca** puede crear una copia durable sin consentimiento)
 
 ```ts
-export type ResultadoCrearContacto =
-  | { status: "error"; mensaje: string }
-  | { status: "ok"; contactoId: string };
-
-export async function crearContacto(
-  vinculo: VinculoContacto,
-  tipo: TipoContacto,
-  fuente: FuenteContacto,
-): Promise<ResultadoCrearContacto> {
+export async function vincularPedidoManualmente(
+  contactoId: string,
+  pedidoId: string,
+): Promise<ResultadoGenerico> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!esAdmin(user?.email)) return { status: "error", mensaje: "No autorizado." };
 
-  const validacion = validarVinculo(vinculo);
-  if (!validacion.valido) return { status: "error", mensaje: validacion.motivo };
-
   const admin = createAdminClient();
-  const columnaConflicto = vinculo.vianderaId
-    ? "viandera_id"
-    : vinculo.interesadoId
-      ? "interesado_id"
-      : null;
+  // Solo vincula (crm_contacto_pedidos) -- nunca toca nombre_libre ni
+  // contacto_libre del contacto. No hay parametro "copiarNombre": esa
+  // via se elimino en esta revision. La unica manera de que un
+  // consumidor obtenga una copia durable es el trigger de consentimiento
+  // (Task 1), nunca esta accion manual.
+  const { error } = await admin
+    .from("crm_contacto_pedidos")
+    .insert({ contacto_id: contactoId, pedido_id: pedidoId })
+    .select()
+    .maybeSingle();
 
-  const payload = {
-    tipo,
-    fuente,
-    estado: "nuevo" as const,
-    viandera_id: vinculo.vianderaId ?? null,
-    interesado_id: vinculo.interesadoId ?? null,
-    nombre_libre: vinculo.nombreLibre ?? null,
-  };
-
-  if (columnaConflicto) {
-    // Idempotente de verdad: on conflict do nothing + select de vuelta,
-    // nunca un insert que falle con un error crudo de constraint.
-    const { data: insertado } = await admin
-      .from("crm_contactos")
-      .insert(payload)
-      .select("id")
-      .maybeSingle();
-
-    if (insertado) return { status: "ok", contactoId: insertado.id };
-
-    const { data: existente } = await admin
-      .from("crm_contactos")
-      .select("id")
-      .eq(columnaConflicto, vinculo[columnaConflicto === "viandera_id" ? "vianderaId" : "interesadoId"])
-      .single();
-
-    if (existente) return { status: "ok", contactoId: existente.id };
-    return { status: "error", mensaje: "No pudimos crear ni encontrar el contacto." };
+  // on conflict do nothing implicito via la PK compuesta -- un insert
+  // duplicado no falla de forma visible al usuario si ya existia
+  // (verificar el manejo exacto del error 23505 al implementar).
+  if (error && error.code !== "23505") {
+    return { status: "error", mensaje: "No pudimos vincular el pedido." };
   }
-
-  const { data, error } = await admin.from("crm_contactos").insert(payload).select("id").single();
-  if (error || !data) return { status: "error", mensaje: "No pudimos crear el contacto." };
-  return { status: "ok", contactoId: data.id };
+  revalidatePath(`/admin/crm/${contactoId}`);
+  return { status: "ok" };
 }
 ```
 
-  Nota de implementación: Supabase JS no tiene un `on conflict do
-  nothing` directo en el builder para todos los casos — si la versión de
-  `@supabase/supabase-js` disponible no lo soporta limpio para este
-  patrón, la alternativa es intentar el `insert`, capturar el código de
-  error de violación de constraint único (`23505`), y hacer el `select`
-  de respaldo en el `catch`/rama de error — mismo resultado observable
-  (idempotente), implementación ligeramente distinta. Confirmar cuál
-  aplica al implementar, no asumir en el plan.
+- [ ] **Paso 4: `retirarConsentimiento(contactoId)`**
 
-- [ ] **Paso 2: `actualizarEstadoContacto`** — sin cambios respecto a la
-  versión anterior de este plan (actualiza `estado` + inserta
-  `crm_interacciones` con `tipo: 'cambio_estado'`).
+```ts
+export async function retirarConsentimiento(contactoId: string): Promise<ResultadoGenerico> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!esAdmin(user?.email)) return { status: "error", mensaje: "No autorizado." };
 
-- [ ] **Paso 3: `agregarNota`**, `crearTarea`, `completarTarea`,
-  `registrarInteraccion`, y **`vincularPedidoManualmente`** (nueva —
-  para el caso de §6 de la spec: admin vincula un pedido sin
-  consentimiento de marketing, sin copiar `nombre_libre` a menos que el
-  admin lo pida explícitamente con un parámetro `copiarNombre: boolean`).
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("crm_contactos")
+    .update({ consentimiento_retirado_en: new Date().toISOString() })
+    .eq("id", contactoId);
 
-- [ ] **Paso 4: Tests** — verificar que ninguna de estas funciones toca
-  `createAdminClient` cuando `esAdmin()` es `false`; verificar que
-  `crearContacto` llamada dos veces con el mismo `vianderaId` devuelve
-  el mismo `contactoId` sin insertar una segunda fila (test de
-  integración, Task 0 del plan de Carrito y pedidos).
+  if (error) return { status: "error", mensaje: "No pudimos registrar el retiro." };
+  revalidatePath(`/admin/crm/${contactoId}`);
+  return { status: "ok" };
+}
+```
 
-- [ ] **Paso 5: Commit**
+- [ ] **Paso 5: `anonimizarContacto(contactoId)`**
+
+```ts
+export async function anonimizarContacto(contactoId: string): Promise<ResultadoGenerico> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!esAdmin(user?.email)) return { status: "error", mensaje: "No autorizado." };
+
+  const admin = createAdminClient();
+  // Si no se retiro consentimiento todavia, esta accion lo implica --
+  // no tiene sentido anonimizar sin tambien excluir de acciones futuras.
+  const { error } = await admin
+    .from("crm_contactos")
+    .update({
+      nombre_libre: null,
+      contacto_libre: null,
+      pii_eliminada: true,
+      consentimiento_retirado_en: new Date().toISOString(),
+    })
+    .eq("id", contactoId);
+
+  if (error) return { status: "error", mensaje: "No pudimos anonimizar el contacto." };
+  revalidatePath(`/admin/crm/${contactoId}`);
+  return { status: "ok" };
+}
+```
+
+- [ ] **Paso 6: `agregarNota`**, `crearTarea`, `completarTarea`,
+  `registrarInteraccion` — sin cambios.
+
+- [ ] **Paso 7: Tests** — `vincularPedidoManualmente` nunca acepta ni
+  procesa un parámetro de nombre/copia (confirmado por la forma del
+  tipo, no en runtime); `retirarConsentimiento`/`anonimizarContacto`
+  rechazan sin `esAdmin()`.
+
+- [ ] **Paso 8: Commit**
 
 ```bash
 git add app/admin/crm/actions.ts app/admin/crm/actions.test.ts
-git commit -m "feat: add idempotent CRM server actions"
+git commit -m "feat: add CRM actions with consent withdrawal and PII anonymization"
 ```
 
 ---
 
 ### Task 4: Panel `/admin/crm`
 
-Sin cambios de fondo respecto a la versión anterior de este plan.
+Sin cambios de fondo respecto a la versión anterior — listado, detalle
+con notas/tareas/interacciones y lista de pedidos vinculados. **Nuevo en
+esta revisión**: el detalle de contacto muestra el estado de
+consentimiento (`consentimiento_retirado_en`/`pii_eliminada` de la
+vista) con botones "Retirar consentimiento" / "Anonimizar" cuando
+corresponde.
 
 **Files:**
 - Create: `app/admin/crm/page.tsx`, `app/admin/crm/[id]/page.tsx`
 - Create: `components/admin/crm/ListaContactos.tsx`,
   `DetalleContacto.tsx`, `FormularioNota.tsx`, `FormularioTarea.tsx`
 
-- [ ] **Pasos 1-4**: listado con filtros, botón "Agregar a CRM", detalle
-  de contacto (notas/tareas/interacciones), responsive — sin cambios.
-  **Corrección de esta revisión**: el detalle de un contacto tipo
-  `consumidor` muestra la lista de **todos** sus pedidos vinculados (vía
-  `crm_contacto_pedidos`, no un solo `pedido_id`) — al menos fecha y
-  total de cada uno.
+- [ ] **Pasos 1-5**: listado con filtros (incluir filtro por estado de
+  consentimiento), detalle de contacto con acciones de retiro/
+  anonimización, responsive.
 
-- [ ] **Paso 5: Commit**
+- [ ] **Paso 6: Commit**
 
 ```bash
 git add app/admin/crm/ components/admin/crm/
-git commit -m "feat: add CRM admin panel with multi-order consumer view"
+git commit -m "feat: add CRM admin panel with consent management"
 ```
 
 ---
 
-### Task 5: Botón "Agregar a CRM" en flujos existentes
+### Task 5: Botón "Agregar a CRM" — solo para aliados y vínculo manual de pedidos
 
 **Files:**
 - Modify: `app/admin/page.tsx`
 
-- [ ] **Paso 1: Consulta adicional** en `/admin` para saber qué
-  `viandera_id`/`interesado_id` ya tienen contacto de CRM.
+**Corregido en esta revisión**: ya no hace falta el botón para
+interesados/vianderas (Task 1 los sincroniza automáticamente). El botón
+que queda en `/admin` es para dos casos: crear un `aliado_estrategico`
+(sin FK, `nombreLibre`), y vincular manualmente un pedido no consentido
+a un contacto ya existente (`vincularPedidoManualmente`, Task 3).
+
+- [ ] **Paso 1**: UI para ambos casos.
 
 - [ ] **Paso 2: Commit**
 
 ```bash
 git add app/admin/page.tsx
-git commit -m "feat: link existing leads and vianderas to CRM from the admin panel"
+git commit -m "feat: add CRM linking UI for allies and manual order association"
 ```
 
 ---
 
-### Task 6: Tests de integración del trigger de consentimiento
+### Task 6: Tests de integración
 
 **Files:**
-- Create (dentro de la infraestructura de Task 0 del plan de Carrito y
-  pedidos): `app/admin/crm/consentimiento.integration.test.ts`
+- Create: `app/admin/crm/consentimiento.integration.test.ts`
+- Create: `app/admin/crm/sincronizacion.integration.test.ts`
 
-- [ ] **Paso 1: Un pedido con `acepta_marketing = true`** crea
-  automáticamente un `crm_contactos` de tipo `consumidor` con
-  `nombre_libre`/`contacto_libre` poblados, y una fila en
-  `crm_contacto_pedidos` vinculándolo.
+- [ ] **Un `interesados_viandera` insertado crea automáticamente su
+  `crm_contactos`** — sin llamar ninguna acción manual.
+- [ ] **Insertarlo dos veces (mismo `interesado_id`, escenario de
+  prueba) no duplica** — idempotencia del trigger.
+- [ ] **Una `vianderas` insertada crea automáticamente su
+  `crm_contactos`** de tipo `cocina_activa`.
+- [ ] **Un pedido con `acepta_marketing = true`** crea el contacto
+  consumidor con copia durable + vínculo en `crm_contacto_pedidos`.
+- [ ] **Un segundo pedido, mismo teléfono pero con formato distinto**
+  (ej. `"3548 635151"` vs. `"+54 9 3548-635151"`) — **consolida en el
+  mismo contacto** (por `contacto_normalizado`, no el texto crudo) — el
+  caso explícito pedido en la revisión: "teléfonos equivalentes con
+  formatos distintos producen un solo contacto".
+- [ ] **Un pedido con `acepta_marketing = false`** no crea nada
+  automáticamente, y `vincularPedidoManualmente` sobre ese pedido no
+  crea `nombre_libre`/`contacto_libre` bajo ninguna circunstancia.
+- [ ] **Retiro de consentimiento excluye al consumidor del CRM
+  comercial**: después de `retirarConsentimiento`, cualquier consulta
+  que en el futuro filtre por "contactos elegibles para marketing" (aun
+  si esta entrega no tiene todavía ninguna) debe poder confiar en
+  `consentimiento_retirado_en is null` como el filtro — el test
+  confirma que el campo se setea correctamente y que
+  `anonimizarContacto` además nullea `nombre_libre`/`contacto_libre` sin
+  borrar `crm_contacto_pedidos`.
 
-- [ ] **Paso 2: Un segundo pedido, mismo `telefono_comprador`, también
-  con `acepta_marketing = true`** — **no** crea un segundo
-  `crm_contactos` (consolida por el índice único de `contacto_libre`),
-  pero sí agrega una segunda fila en `crm_contacto_pedidos` — **un
-  contacto CRM relacionado con varios pedidos**, exactamente el caso que
-  pedía la revisión.
-
-- [ ] **Paso 3: Un pedido con `acepta_marketing = false`** no crea
-  ningún `crm_contactos` ni fila en `crm_contacto_pedidos`.
-
-- [ ] **Paso 4: Commit**
+- [ ] **Commit**
 
 ```bash
-git add app/admin/crm/consentimiento.integration.test.ts
-git commit -m "test: add integration coverage for the marketing-consent CRM trigger"
+git add app/admin/crm/consentimiento.integration.test.ts app/admin/crm/sincronizacion.integration.test.ts
+git commit -m "test: add integration coverage for auto-sync, normalized dedup, and consent withdrawal"
 ```
 
 ---
@@ -499,23 +552,28 @@ git commit -m "test: add integration coverage for the marketing-consent CRM trig
 
 - [ ] `select * from pg_policies where tablename like 'crm_%'` devuelve
   cero filas.
-- [ ] Todas las Server Actions de `app/admin/crm/actions.ts` llaman
-  `esAdmin()` antes de cualquier lectura/escritura.
-- [ ] `crm_contactos_resumen` no expone ninguna columna que no fuera ya
-  legible por el admin a través de otra vía existente.
-- [ ] La copia durable de nombre/contacto de un consumidor **solo**
-  ocurre cuando `pedidos.acepta_marketing = true` — confirmado por test
-  de integración (Task 6), no solo por lectura del trigger.
-- [ ] Un pedido sin consentimiento de marketing nunca genera
-  automáticamente una ficha de CRM.
-- [ ] `crm_notas.texto`/`crm_interacciones.resumen`: advertencia en la UI
-  para no pegar datos que no hagan falta guardar.
+- [ ] Todas las Server Actions llaman `esAdmin()` antes de cualquier
+  operación.
+- [ ] Deduplicación de consumidores confirmada por `contacto_normalizado`,
+  no `contacto_libre` (test de integración de la Task 6 con formatos
+  distintos del mismo teléfono).
+- [ ] `vincularPedidoManualmente` no tiene ningún parámetro ni rama de
+  código que pueda copiar `nombre_libre`/`contacto_libre` de un pedido
+  sin `acepta_marketing = true`.
+- [ ] Los triggers de sincronización de interesados/cocinas son
+  idempotentes (`on conflict do nothing`), probado insertando dos veces
+  en el test de integración.
+- [ ] `retirarConsentimiento`/`anonimizarContacto` gateados por
+  `esAdmin()`.
+- [ ] `anonimizarContacto` conserva `crm_contacto_pedidos` (relación
+  operativa) mientras nullea la PII.
 
 ## QA responsive
 
-- [ ] `/admin/crm`: listado y filtros, 375–1440px.
-- [ ] `/admin/crm/[id]`: detalle con notas/tareas/interacciones y la
-  lista de pedidos vinculados (para un consumidor), mismos breakpoints.
+- [ ] `/admin/crm`: listado, filtros (incluido por consentimiento),
+  375–1440px.
+- [ ] `/admin/crm/[id]`: detalle con acciones de retiro/anonimización,
+  mismos breakpoints.
 
 ## Punto de detención
 

@@ -1,77 +1,77 @@
 # Carrito y pedidos por WhatsApp — Diseño
 
-**Fecha:** 2026-09-04 (revisión correctiva 2026-09-04)
-**Estado:** Corregido tras revisión de Codex sobre el commit `4196de3` —
-pendiente de una segunda revisión antes de implementar. Cambios de esta
-revisión: creación atómica del pedido (§6), limitador de abuso (§7,
-nueva), costo `null` deshabilita la modalidad en vez de convertirse en
-`0`/"a coordinar" (§5, §9), transiciones de `pedidos.estado` validadas
-explícitamente (§10), idempotencia sobrevive a un refresh de pantalla y
-verifica contenido (§8), cobertura de TDD ampliada (§12).
+**Fecha:** 2026-09-04 (segunda revisión correctiva 2026-09-04)
+**Estado:** Corregido tras la segunda revisión de Codex sobre el commit
+`2ee4acc` — pendiente de una tercera revisión antes de implementar.
+Cambios de esta revisión: `crear_pedido_atomico` ahora bloquea
+(`FOR UPDATE`) y revalida cocina/disponibilidad/precio **dentro** de la
+transacción, en vez de confiar en una lectura previa de la Server Action
+(§6); `request_hash` canónico reemplaza la comparación ad-hoc de
+contenido para la idempotencia concurrente (§8); `calcularTotal` rechaza
+`null`/`NaN`/`Infinity` en runtime, no solo negativos (§13); el limitador
+de abuso usa HMAC real (no hash simple), no confía en un `sesionId` libre
+como frontera de seguridad, y el límite global pasa a ser un circuito de
+emergencia de umbral alto, no un bloqueo rutinario (§7); el cron de
+purgado falla cerrado sin secreto y comparte servicio con la limpieza del
+limitador (§9); TDD ampliado con los 14 casos pedidos en esta revisión
+(§13).
 **Depende de:** Envíos y adhesión a Puni (necesita
 `vianderas.costo_envio_propio`, `vianderas.cobertura_envio` y una
-proyección server-only de `puni_adhesiones` para calcular costo de envío
-y ofrecer la modalidad Puni — la vendedora configura el costo de Puni
-ella misma una vez aprobada, ver esa spec §3). Ver "Orden recomendado de
-implementación" en el reporte final.
+proyección server-only de `puni_adhesiones` — ver esa spec, corregida en
+esta misma revisión para eliminar el acceso directo de la vendedora a la
+tabla). Ver "Orden recomendado de implementación" en el reporte final.
 
 ## 1. Objetivo
 
 Reemplazar el flujo actual de "consultar por WhatsApp un solo plato"
 (`WhatsAppIntent.tsx`) por uno de carrito multi-plato de **una sola
 cocina**, que termina igual en WhatsApp — sin pagos online, sin cuenta de
-consumidor, sin checkout propio. ViandApp arma el pedido y el mensaje;
-comprador y vendedor confirman y coordinan fuera de la app.
+consumidor, sin checkout propio.
 
 ## 2. Invariantes no negociables
 
-Copiados textual de lo pedido, porque son la especificación misma, no una
-interpretación:
-
-1. **Una cocina por carrito.** Agregar un plato de otra viandera vacía el
-   carrito anterior (con confirmación) o directamente lo rechaza — decisión
-   de UX en el plan, pero el invariante en el servidor es innegociable: el
-   servidor rechaza cualquier pedido cuyos ítems no pertenezcan todos a la
-   misma `vianderas_id`.
-2. **Revalidación server-side obligatoria.** Antes de crear el pedido, el
-   servidor vuelve a consultar `viandas.disponible` y `viandas.precio`
-   directo de la base — nunca confía en lo que el cliente dice que vio.
-3. **Captura inmutable.** El pedido guarda `nombre_capturado` y
-   `precio_capturado` de cada plato en el momento de la confirmación. Si
-   después el plato cambia de nombre o precio, o se borra, el pedido ya
-   generado no cambia.
-4. **Total exacto.** `total = Σ(precio_capturado × cantidad) + costo_envio_capturado`.
-   Sin redondeos ocultos, sin cargos no declarados. `null` en el costo de
-   envío de una modalidad significa "todavía no hay una tarifa utilizable"
-   — esa modalidad queda **deshabilitada** en el checkout, nunca se
-   convierte en `0` ni en "a coordinar" dentro de un pedido. `0` solo
-   significa envío gratuito configurado explícitamente por la vendedora.
-   Un pedido con total "aproximado" no es un pedido con total exacto.
+1. **Una cocina por carrito.** El servidor rechaza cualquier pedido cuyos
+   ítems no pertenezcan todos a la misma `vianderas_id`.
+2. **Revalidación server-side obligatoria, dentro de la misma transacción
+   que la escritura.** No alcanza con que la Server Action lea
+   `viandas` antes de llamar a la función que crea el pedido — entre esa
+   lectura y el `insert` puede pasar cualquier cosa (otro pedido
+   concurrente, la vendedora editando el precio). La función que crea el
+   pedido vuelve a leer y **bloquea** (`SELECT ... FOR UPDATE`) las filas
+   de `viandas` involucradas, dentro de su propia transacción, y calcula
+   todo a partir de esa lectura bloqueada — nunca de lo que la Server
+   Action leyó antes de invocarla.
+3. **Captura inmutable, calculada por la base, nunca por la aplicación.**
+   `nombre_capturado` y `precio_capturado` de cada plato salen de la fila
+   de `viandas` que la función bloqueó y leyó — la aplicación puede
+   *sugerir* qué cree que vio (para detectar y mostrar cambios), pero
+   nunca son valores autoritativos que la función simplemente copie.
+4. **Total exacto, calculado por la base.** `total = Σ(precio_capturado ×
+   cantidad) + costo_envio_capturado`, calculado dentro de la misma
+   función, a partir de los mismos valores bloqueados — nunca un `total`
+   que la aplicación envíe y la función solo persista. `null` en el costo
+   de envío de una modalidad significa "todavía no hay una tarifa
+   utilizable" — esa modalidad queda deshabilitada en el checkout. `0`
+   solo significa envío gratuito configurado explícitamente. Precios,
+   cantidades y costos se validan en runtime como números finitos — un
+   `NaN`, `Infinity` o `null` en cualquiera de estos campos se rechaza
+   antes de cualquier operación aritmética, nunca se propaga
+   silenciosamente (`100 + null` en JavaScript es `100`, no un error —
+   ver §13, este bug concreto ya se encontró y se corrige acá).
 5. **Si cambió un precio, el comprador revisa de nuevo.** Nunca se
-   recalcula y se sigue en silencio — se muestra qué cambió y se pide
-   confirmación explícita.
-6. **Sin pagos online.** Ningún campo de tarjeta, ningún gateway. El pedido
-   termina en un link de WhatsApp.
-7. **Abrir WhatsApp no es confirmar.** El estado inicial del pedido
-   (`generado`) no significa que el mensaje se envió ni que la vendedora lo
-   vio. Solo la vendedora, manualmente desde `/viandera`, puede marcarlo
-   `confirmado` o `rechazado` después de hablar con la compradora — y solo
-   siguiendo transiciones válidas (§10), nunca a cualquier valor del enum.
-8. **Pedido y sus ítems se crean atómicamente.** Una única función
-   transaccional de Postgres inserta `pedidos` + `pedido_items` — nunca
-   una secuencia de llamadas desde la Server Action que pueda dejar un
-   pedido sin ítems si falla a mitad de camino.
+   recalcula y se sigue en silencio.
+6. **Sin pagos online.**
+7. **Abrir WhatsApp no es confirmar.** Solo la vendedora, siguiendo
+   transiciones válidas (§11), puede marcar el pedido `confirmado` o
+   `rechazado`.
+8. **Pedido y sus ítems se crean atómicamente, con los datos vigentes
+   verificados dentro de la misma transacción que los escribe.** Ver §6.
 
 ## 3. Carrito: dónde vive
 
-Sin cuenta de consumidor (el explorador MVP es explícitamente sin
-registro — no se revierte eso acá). El carrito es **puramente de
-cliente**: `localStorage`, scoped a una `vianderaId`. No hay tabla
-`carritos` en la base — no hay nada que persistir server-side hasta que el
-comprador decide confirmar. Esto también resuelve solo la privacidad: no
-se guarda ni un ítem elegido si la persona nunca llega a confirmar.
-
-Estructura en `localStorage` (clave `viandapp:carrito`):
+Sin cambios respecto a la versión anterior: `localStorage`, sin tabla
+`carritos` en la base, sin precios ni nombres cacheados server-side antes
+de confirmar.
 
 ```ts
 type CarritoAlmacenado = {
@@ -80,43 +80,35 @@ type CarritoAlmacenado = {
 };
 ```
 
-Sin precios ni nombres en el carrito almacenado — esos se resuelven
-siempre contra el servidor al mostrar el carrito y de nuevo al confirmar
-(doble fuente de verdad: la UI puede mostrar el precio que vio al agregar
-para una previsualización optimista, pero la confirmación real siempre
-revalida).
-
 ## 4. Flujo
 
 ```
-1. Consumidor navega /{slug} o /explorar, agrega platos al carrito (localStorage).
-2. Abre el carrito → GET server-side de los platos actuales (precio/disponibilidad
-   frescos) para mostrar el resumen real, no el cacheado.
-3. Elige modalidad: solo se muestran las que tienen un costo de envío
-   resoluble ahora mismo — retiro (siempre `0`), envío propio (solo si
-   `costo_envio_propio` no es `null`), envío Puni (solo si la adhesión
-   está `aprobada` **y** la vendedora ya configuró su costo, ver spec de
-   Envíos/Puni §3-4).
-4. Completa nombre + teléfono (obligatorios para coordinar) y dirección
-   (obligatoria solo si la modalidad es de envío).
-5. Tilda (opcional, sin marcar por defecto) "Quiero que me avisen de nuevas
-   cocinas" — consentimiento de marketing, separado del envío del pedido.
+1. Consumidor agrega platos al carrito (localStorage).
+2. Abre el carrito → GET server-side de precio/disponibilidad frescos,
+   solo para mostrar un resumen razonable — esta lectura es informativa,
+   NUNCA la fuente de verdad final (esa vive dentro de la función
+   atómica, ver §6).
+3. Elige modalidad — solo las que tienen costo de envío resoluble ahora
+   mismo (spec de Envíos/Puni).
+4. Completa nombre + teléfono + dirección (si aplica).
+5. Tilda (opcional, destildado por defecto) consentimiento de marketing.
 6. Confirma → Server Action `generarPedido`:
-   a. Chequea el limitador de abuso (§7) — si está excedido, corta acá sin
-      tocar nada más.
-   b. Revalida disponibilidad y precio de cada ítem, y que la modalidad
-      elegida siga teniendo un costo resoluble.
-   c. Si algo cambió → responde `revisar_carrito` con el detalle, sin crear nada.
-   d. Si todo coincide → llama la función transaccional `crear_pedido_atomico`
-      (§6) con el `idempotency_key` persistido en `sessionStorage` (§8), que
-      inserta `pedidos` + `pedido_items` en una sola transacción, calcula el
-      total server-side, y arma el mensaje de WhatsApp.
-7. Cliente recibe el link `wa.me/...` y lo abre. El pedido queda en estado
-   `generado`. El carrito (y la `idempotency_key` en `sessionStorage`) se
-   limpian recién acá.
-8. La vendedora, desde /viandera, ve el pedido y lo marca `confirmado` o
-   `rechazado` siguiendo las transiciones válidas de §10, después de
-   coordinar por WhatsApp.
+   a. Chequea el limitador de abuso (§7) — si está excedido, corta acá.
+   b. Hace una revalidación liviana (no bloqueante) para poder mostrar
+      `revisar_carrito` con buena UX sin gastar un viaje a la función
+      atómica en el caso común de "todo cambió, avisale al usuario antes
+      de intentar nada más pesado".
+   c. Si esa revalidación liviana no encuentra cambios, llama a
+      `crear_pedido_atomico` (§6), que hace la revalidación **real**
+      (bloqueante, autoritativa) y crea el pedido si todo sigue en
+      orden, o devuelve qué cambió si no.
+   d. Si la función atómica reporta cambios (pudieron ocurrir en la
+      ventana entre el paso b y el c, por eso la revalidación de la
+      función es la que cuenta) → `revisar_carrito`, sin haber escrito
+      nada.
+7. Cliente recibe el link `wa.me/...`. El pedido queda `generado`.
+8. La vendedora marca `confirmado`/`rechazado` siguiendo transiciones
+   válidas (§11).
 ```
 
 ## 5. Modelo de datos
@@ -126,291 +118,293 @@ revalida).
 | Columna | Tipo | Notas |
 |---|---|---|
 | `id` | `uuid` | PK |
-| `idempotency_key` | `uuid` | `unique not null` — ver §6 |
-| `vianderas_id` | `uuid` | FK `vianderas`, `on delete restrict` (no se borra un pedido histórico si la cocina se da de baja) |
+| `idempotency_key` | `uuid` | `unique not null` |
+| `request_hash` | `text` | `not null` — huella canónica del pedido solicitado, ver §8 |
+| `vianderas_id` | `uuid` | FK `vianderas`, `on delete restrict` |
 | `modalidad` | `text` | `check in ('retiro','envio_propio','envio_puni')` |
 | `costo_envio_capturado` | `numeric` | `not null default 0 check (>= 0)` |
-| `total` | `numeric` | `not null check (>= 0)` — recalculado y verificado server-side, nunca aceptado del cliente |
+| `total` | `numeric` | `not null check (>= 0)` — calculado por `crear_pedido_atomico`, nunca aceptado del cliente |
 | `estado` | `text` | `check in ('generado','confirmado','rechazado','cancelado')`, default `'generado'` |
-| `nombre_comprador` | `text` | Transitorio — ver §7 |
+| `nombre_comprador` | `text` | Transitorio — ver §9 |
 | `telefono_comprador` | `text` | Transitorio |
-| `direccion_envio` | `text` | Transitorio, solo relevante si `modalidad != 'retiro'` |
+| `direccion_envio` | `text` | Transitorio |
 | `acepta_marketing` | `boolean` | `not null default false` |
-| `consentimiento_marketing_en` | `timestamptz` | Nullable, seteado solo si `acepta_marketing = true` |
-| `purgar_datos_en` | `timestamptz` | `not null default (now() + interval '90 days')` — 90 días, confirmado (ver §9) |
+| `consentimiento_marketing_en` | `timestamptz` | Nullable |
+| `purgar_datos_en` | `timestamptz` | `not null default (now() + interval '90 days')` |
 | `datos_purgados` | `boolean` | `not null default false` |
 | `created_at` / `updated_at` | `timestamptz` | |
 
 ### `pedido_items`
 
-| Columna | Tipo | Notas |
-|---|---|---|
-| `id` | `uuid` | PK |
-| `pedido_id` | `uuid` | FK `pedidos`, `on delete cascade` |
-| `vianda_id` | `uuid` | FK `viandas`, `on delete set null` — referencia de conveniencia, **no** autoritativa |
-| `nombre_capturado` | `text` | `not null` |
-| `precio_capturado` | `numeric` | `not null check (>= 0)` |
-| `cantidad` | `integer` | `not null check (> 0)` |
-| `subtotal` | `numeric` | `generated always as (precio_capturado * cantidad) stored` — garantía a nivel de schema, no solo de aplicación |
+Sin cambios respecto a la versión anterior — `nombre_capturado`,
+`precio_capturado`, `cantidad`, `subtotal` (columna generada).
 
-`pedidos.total` se calcula **dentro** de la función transaccional (§6) a
-partir de los mismos ítems que se insertan — no hay una ventana entre
-"calcular" e "insertar" donde algo pueda desincronizarse.
+## 6. Pedido realmente atómico
 
-## 6. Pedido atómico
+**Corrección central de esta revisión**: en la versión anterior, la
+función `crear_pedido_atomico` recibía ítems ya "revalidados por la
+Server Action" y solo los persistía — eso deja exactamente la carrera que
+todo este diseño quiere evitar (la Server Action lee `viandas`, y *antes*
+de que la función inserte, otra transacción concurrente pudo cambiar el
+precio o la disponibilidad). La corrección: la función hace la lectura
+autoritativa **ella misma**, bloqueando las filas, dentro de su propia
+transacción.
 
-`pedidos` y `pedido_items` se crean **exclusivamente** dentro de una
-función de Postgres (`crear_pedido_atomico`, `language plpgsql`) que hace
-todos los inserts en una sola transacción — nunca una secuencia de
-llamadas separadas desde la Server Action. Si el insert de `pedido_items`
-fallara (constraint violado, dato inesperado), la transacción entera hace
-rollback: no queda un `pedidos` huérfano sin ítems.
+**Firma** (conceptual — el plan tiene el SQL completo con tipos exactos):
 
-La función:
+```
+crear_pedido_atomico(
+  p_idempotency_key uuid,
+  p_vianderas_id uuid,
+  p_modalidad text,
+  p_costo_envio_esperado numeric,   -- lo que el cliente cree que va a pagar de envío; NO autoritativo
+  p_items jsonb,                     -- [{vianda_id, cantidad, precio_esperado}], precio_esperado NO autoritativo
+  p_nombre_comprador text,
+  p_telefono_comprador text,
+  p_direccion_envio text,
+  p_acepta_marketing boolean
+) returns pedido_resultado             -- tipo compuesto: { ok boolean, pedido pedidos, cambios jsonb }
+```
 
-- Recibe `idempotency_key`, los datos del pedido, y los ítems como
-  parámetros (los ítems como `jsonb`, ya revalidados por la Server Action
-  antes de llamarla — la función no vuelve a consultar `viandas`, esa
-  responsabilidad es de la Server Action, que sí tiene acceso de lectura
-  ordinario; la función solo persiste lo que ya se validó).
-- Si `idempotency_key` ya existe: compara el contenido (ítems + total +
-  modalidad) contra lo guardado. Si coincide, devuelve el pedido existente
-  sin volver a insertar nada. Si **no** coincide, rechaza explícitamente
-  (§8) — nunca "actualiza silenciosamente" un pedido ya creado con
-  contenido distinto.
-- Si no existe, inserta `pedidos` y sus `pedido_items` en la misma
-  transacción y devuelve la fila creada.
+Dentro de la función, en este orden, todo en una sola transacción:
 
-Privilegios: `revoke execute on function crear_pedido_atomico from
-public, anon, authenticated; grant execute ... to service_role;` — la
-única forma de invocarla es desde `createAdminClient()` en la Server
-Action, después de toda la revalidación. Nadie más puede ejecutarla ni
-aunque conociera su firma.
+1. **Validar la forma de `p_items`**: array no vacío; `vianda_id` únicos
+   (sin repetidos); cada `cantidad` es un entero dentro de un rango
+   definido (`1..50` por ítem — número inicial razonable, no una cifra de
+   negocio cerrada); si algo de esto falla, la función lanza una
+   excepción explícita **antes** de tocar `viandas` — un `p_items`
+   malformado no debe ni siquiera intentar bloquear filas.
+2. **Bloquear y leer las filas reales**: `select id, nombre, precio,
+   disponible from viandas where id = any(<vianda_ids de p_items>) and
+   vianderas_id = p_vianderas_id for update`. El filtro por
+   `vianderas_id` en la misma query es la verificación de "una sola
+   cocina" a nivel de dato (si alguien intenta mezclar IDs de otra
+   cocina, esas filas simplemente no vuelven).
+3. Si la cantidad de filas devueltas no coincide con la cantidad de
+   `vianda_id` distintos pedidos, o alguna tiene `disponible = false`, o
+   algún precio leído difiere del `precio_esperado` correspondiente →
+   la función arma la lista de `cambios` (mismo vocabulario que
+   `detectarCambios`: `plato_no_disponible`, `precio_cambio`) y devuelve
+   `{ok: false, cambios: [...]}` **sin insertar nada** — ni `pedidos` ni
+   `pedido_items`.
+4. Si todo coincide, calcula `precio_capturado`/`nombre_capturado` de
+   cada ítem **desde las filas bloqueadas** (nunca desde
+   `precio_esperado`), calcula `subtotal` por ítem y `total` como su
+   suma más el costo de envío vigente (leído de `vianderas`/
+   `puni_adhesiones` dentro de la misma transacción, comparado del mismo
+   modo contra `p_costo_envio_esperado` — un costo de envío que cambió
+   entre que se abrió el carrito y se confirmó también es un `cambio`
+   detectable, no algo que se cuele en el total).
+5. Calcula `request_hash` (§8) a partir de los parámetros de entrada
+   (canónicos, no de lo calculado).
+6. Intenta `insert into pedidos (...) on conflict (idempotency_key) do
+   nothing returning *`. Si no insertó (ya existía, sea porque una
+   llamada anterior de verdad ya lo creó, o porque una llamada
+   concurrente idéntica ganó la carrera mientras esta transacción estaba
+   bloqueada esperando el mismo lock de `viandas`), lee la fila existente
+   por `idempotency_key` y compara `request_hash`: coincide → devuelve
+   esa fila como resultado exitoso (sin insertar `pedido_items` de
+   nuevo); no coincide → lanza una excepción distinta
+   (`idempotency_key_content_mismatch`).
+7. Si insertó, inserta `pedido_items` en la misma transacción y devuelve
+   `{ok: true, pedido: <fila>}`.
+
+**Privilegios**: `revoke execute on function
+crear_pedido_atomico(uuid, uuid, text, numeric, jsonb, text, text, text,
+boolean) from public, anon, authenticated; grant execute on function
+crear_pedido_atomico(...) to service_role;` — con la firma de argumentos
+completa en el `revoke`/`grant` (Postgres exige el tipo de cada
+parámetro para identificar la función sin ambigüedad; un `grant ... on
+function nombre` sin firma es SQL inválido o ambiguo si hay más de una
+función con ese nombre).
 
 ## 7. Limitación de abuso (rate limiting)
 
-La idempotencia (§8) evita duplicados **accidentales** (doble-click,
-reintento de red) — no evita que alguien genere pedidos falsos en
-volumen. `generarPedido` chequea un límite **antes** de cualquier
-revalidación o escritura:
+Tres capas, ninguna es un sustituto de la idempotencia (§8) — resuelven
+problemas distintos.
 
-- **Global**: máximo de pedidos creados en toda la app dentro de una
-  ventana corta (ej. 100 cada 5 minutos — número inicial, ajustable, no
-  una cifra de negocio confirmada).
-- **Por sesión de checkout**: el cliente ya trae un `idempotency_key`
-  guardado en `sessionStorage` (§8); se deriva de ahí (o de un token de
-  sesión separado, a definir en el plan) una clave para limitar cuántos
-  pedidos puede intentar generar la misma sesión de navegador en una
-  ventana corta (ej. 5 cada hora).
-- **Por origen (IP)**: como segunda capa, para que limpiar
-  `sessionStorage` no sea una forma trivial de eludir el límite anterior.
-  **Nunca se guarda la IP en texto plano** — se guarda un hash
-  (`sha256(ip || salt)`, con `salt` un secreto server-only en variable de
-  entorno, nunca commiteado) como clave de un contador de ventana fija.
+- **Por origen (IP), la capa que de verdad importa como frontera de
+  seguridad.** La IP se pasa por **HMAC-SHA256 con secreto**
+  (`RATE_LIMIT_SECRET`, server-only, nunca commiteado) — no una
+  concatenación + SHA256 simple (más débil, más susceptible a ciertos
+  ataques de diccionario si el secreto se filtra parcialmente). Nunca se
+  guarda la IP original.
+- **Por sesión, señal secundaria únicamente — nunca la frontera de
+  seguridad.** El identificador de sesión lo emite el **servidor** (una
+  cookie `httpOnly` con un valor aleatorio, seteada la primera vez que el
+  visitante llega a la pantalla de checkout) — no un valor que el
+  navegador genere y mande libremente. Aun así, es una señal secundaria:
+  alguien puede descartar cookies y obtener una sesión nueva sin mucho
+  esfuerzo, así que esta capa existe para dar una mejor experiencia (un
+  mensaje de "ya generaste varios pedidos, esperá un rato" atribuible a
+  *esa* sesión) pero **rotar este identificador nunca debe alcanzar para
+  evadir el límite real**, que es el de IP.
+- **Global, como circuito de emergencia, no como bloqueo rutinario.** Un
+  umbral bajo acá (el ~100/5min de la revisión anterior) tiene un efecto
+  perverso: un puñado de solicitudes maliciosas concentradas
+  bloquearían **toda la plataforma** para compradores legítimos — el
+  límite global se convierte en la herramienta de un atacante, no una
+  defensa. Se sube a un umbral mucho más alto (ej. 1000 cada 5 minutos)
+  y se trata como una señal de incidente (alertable, para que alguien lo
+  mire) — no como parte del camino normal de rechazo. En operación
+  normal, este límite no debería activarse nunca.
 
-Diseño: una tabla de contadores por clave+ventana (ver plan para el
-schema), con un incremento atómico (`insert ... on conflict (clave,
-ventana) do update set intentos = intentos + 1 returning intentos`) para
-que el chequeo no tenga una condición de carrera entre leer y escribir.
-Si cualquiera de las tres capas está excedida, `generarPedido` devuelve
-un error genérico (sin distinguir cuál capa fue, para no dar información
-útil a quien esté abusando) y no toca `pedidos` en absoluto.
+**Semántica exacta** (ambigua en la revisión anterior, corregida acá):
+con un límite de 5, las primeras 5 solicitudes de esa clave/ventana se
+permiten, la 6ª se bloquea. El contador se incrementa en cada intento
+(exitoso o no); el chequeo es `intentos_despues_de_incrementar >
+limite`, no `>=`.
 
-## 8. Idempotencia
+**Limpieza y retención**: los contadores de ventana vencida no se
+acumulan para siempre — un servicio compartido con el purgado de pedidos
+(§9) borra filas de `limite_solicitudes` más viejas que su propia
+ventana de retención (ej. 7 días — suficiente para cualquier auditoría
+razonable de abuso, sin acumular datos indefinidamente). El hash de IP
+en sí nunca se convierte en un identificador de largo plazo — su único
+propósito es contar intentos en una ventana corta.
 
-El cliente genera un `idempotency_key` (UUID v4) **una sola vez**, en el
-momento en que se abre la pantalla de confirmación del carrito, y lo
-guarda en `sessionStorage` (no `localStorage`: no debe sobrevivir a
-cerrar la pestaña, pero sí debe **sobrevivir a un refresh de la
-pantalla de checkout** — si el comprador recarga por error o por un
-timeout de red, debe poder reintentar con la misma key en vez de generar
-un pedido nuevo). La key se conserva hasta que:
+## 8. Idempotencia concurrente
 
-- el pedido se completa (`generarPedido` devuelve `ok`) — se limpia junto
-  con el carrito, o
-- el carrito cambia materialmente (se agrega/quita un ítem, cambia una
-  cantidad) — en ese caso el cliente **regenera** la key, porque es una
-  intención de compra distinta.
+`idempotency_key` por sí sola no alcanza cuando dos llamadas
+**concurrentes** con la misma key llegan casi al mismo tiempo — hace
+falta una forma de comparar "¿es realmente la misma solicitud, o alguien
+reutilizó la key con otra cosa?" sin ambigüedad, y sin que el orden de
+llegada de dos solicitudes idénticas produzca dos pedidos.
 
-`crear_pedido_atomico` (§6) es quien de verdad garantiza la idempotencia
-a nivel de dato: si `idempotency_key` ya existe, compara el contenido
-recibido contra lo guardado.
+**`request_hash`**: una huella canónica, calculada **dentro** de
+`crear_pedido_atomico` (nunca confiada del cliente), a partir de:
 
-- **Contenido igual** → devuelve el pedido existente, no inserta nada
-  nuevo (reintento legítimo: doble-click, refresh, reintento de red).
-- **Contenido distinto** → rechaza explícitamente. Esto solo puede pasar
-  si el cliente reutilizó una key vieja con un carrito distinto (un caso
-  que el diseño del cliente ya evita regenerando la key al cambiar el
-  carrito, pero el servidor no confía en que el cliente se porte bien —
-  es la misma disciplina que el resto de esta spec).
+- `vianderas_id`
+- `modalidad`
+- Los ítems, como `{vianda_id, cantidad}`, **ordenados por `vianda_id`**
+  — nunca por el `id` de `pedido_items` (esa columna es un UUID
+  aleatorio generado recién al insertar; no existe todavía cuando se
+  calcula el hash de la solicitud entrante, y aunque existiera, dos
+  llamadas idénticas podrían generar UUIDs distintos para "el mismo"
+  ítem — no es una clave estable para canonicalizar).
+- `nombre_comprador`/`telefono_comprador`/`direccion_envio`,
+  normalizados (trim, mismo criterio de normalización que el resto del
+  sistema).
+- `acepta_marketing`.
 
-Un doble-click, un reintento de red, o un refresh de la pantalla de
-confirmación nunca generan dos pedidos ni corrompen uno existente.
+**No incluye** precio ni total — esos son lo que el servidor determina,
+no lo que el cliente pidió; dos llamadas con el mismo `idempotency_key`
+y el mismo pedido solicitado deben considerarse "la misma solicitud"
+incluso si el precio cambió entre medio (en cuyo caso, la primera
+llamada que logró crear el pedido ya fijó su `precio_capturado`, y la
+segunda llamada simplemente recibe esa misma fila — no una nueva con el
+precio actualizado).
 
-## 9. Privacidad: minimización de datos del comprador
+Comportamiento (ver §6, paso 6):
 
-- `nombre_comprador`, `telefono_comprador`, `direccion_envio` se guardan
-  porque la vendedora los necesita para coordinar (y porque el pedido en
-  `/viandera` es más útil con contexto) — pero no indefinidamente.
-- **Retención fijada en 90 días** (decisión cerrada en esta revisión, ya
-  no una propuesta). `purgar_datos_en = created_at + 90 días`.
-- El purgado no puede depender únicamente de que el admin recuerde
-  apretar un botón. Mecanismo primario: un **Vercel Cron Job**
-  (`vercel.json` → `crons`, corre diario) que pega a una Route Handler
-  protegida (`Authorization: Bearer $CRON_SECRET`) que ejecuta el
-  purgado vía `createAdminClient()`. Una Server Action manual desde
-  `/admin` queda como respaldo/gatillo inmediato, no como el mecanismo
-  principal. **Gate de publicación**: esta entrega no se considera lista
-  para producción hasta confirmar que el cron corre — ver checklist de
-  seguridad del plan.
-- El purgado nullea `nombre_comprador`/`telefono_comprador`/
-  `direccion_envio` y marca `datos_purgados = true`. El resto del pedido
-  (ítems, total, modalidad, fechas, estado) **no se borra** — sigue
-  siendo el historial de ventas de la vendedora y la base del CRM.
-- El consentimiento de marketing (`acepta_marketing`) es independiente:
-  aceptar el pedido nunca implica aceptar marketing, y el checkbox
-  correspondiente arranca **destildado**. Ver spec de CRM §3/§9 para cómo
-  el consentimiento de marketing (no el pedido en sí) es lo que
-  determina si un comprador conserva una ficha de CRM más allá de la
-  ventana de retención de 90 días.
+- **Dos llamadas concurrentes, contenido idéntico** → ambas calculan el
+  mismo `request_hash`; una gana la carrera de inserción, la otra la
+  detecta por `on conflict` y devuelve la misma fila. Un solo pedido.
+- **Misma key, mismo contenido, en **distinto orden** de ítems en el
+  array de entrada** → el `request_hash` es el mismo (por el ordenamiento
+  canónico por `vianda_id`), así que se trata igual que el caso anterior.
+- **Misma key, contenido distinto** (otra dirección, otra modalidad,
+  otro costo, otros ítems) → `request_hash` distinto → rechazo
+  explícito, nunca sobrescribe el pedido existente.
+
+## 9. Privacidad y retención
+
+Sin cambios de fondo respecto a la versión anterior — 90 días,
+`purgar_datos_en`. **Correcciones de esta revisión** (detalle completo en
+el plan): el cron falla cerrado si `CRON_SECRET` no está configurado
+(nunca autoriza por accidente con un secreto vacío/ausente), revisa el
+resultado del `update` y no reporta "purgados" si la escritura falló, y
+la lógica de purgado vive en un único servicio compartido entre el cron
+y la Server Action manual de `/admin` (no duplicada en dos lugares que
+puedan divergir). Ese mismo servicio limpia también los contadores
+vencidos de `limite_solicitudes` (§7).
 
 ## 10. Generación del mensaje de WhatsApp
 
-Reutiliza `telefonoParaWhatsapp` (`lib/viandera/telefono.ts`) para el
-número de la vendedora — mismo criterio que `WhatsAppIntent.tsx` hoy: si
-no hay teléfono válido, no se puede llegar a confirmar el pedido (el
-carrito debe avisar esto ANTES de pedir los datos del comprador, no
-después).
-
-Mensaje (server-side, determinístico, `encodeURIComponent` al armar el
-link — mismo patrón que `WhatsAppIntent.tsx`):
-
-```
-Hola! Quiero hacer un pedido en ViandApp:
-
-- 2x Milanesa napolitana — $4200
-- 1x Tarta de verduras — $2800
-
-Envío propio: $600
-Total: $11 800
-
-Retiro/envío: Envío propio
-Nombre: María
-Dirección: [dirección]
-
-¿Está todo disponible?
-```
-
-El texto exacto (saltos de línea, formato de moneda, si se listan
-ítems con guion o número) se termina de definir en el plan de
-implementación con tests — acá se fija el **contenido obligatorio**: cada
-ítem con cantidad/nombre/precio, costo de envío si aplica, total,
-modalidad, nombre del comprador, dirección si aplica. Nunca se incluye el
-teléfono del comprador en el texto del mensaje (WhatsApp ya lo expone al
-remitente por el chat mismo — repetirlo en el cuerpo es redundante y
-aumenta la superficie de datos en un texto que además queda en el
-historial de chat de ambos lados).
+Sin cambios respecto a la versión anterior.
 
 ## 11. Panel de la vendedora (`/viandera`) y transiciones de `estado`
 
-Nueva sección (no reemplaza nada existente) para listar pedidos recibidos:
-fecha, cliente, ítems, total, modalidad, estado. Sin edición de montos ni
-ítems desde acá — un pedido ya generado es inmutable en su contenido,
-solo su `estado` cambia, y **no a cualquier valor del enum**:
-
-| Desde | Hacia | Quién |
-|---|---|---|
-| `generado` | `confirmado` | Vendedora |
-| `generado` | `rechazado` | Vendedora |
-| cualquiera | `cancelado` | Reservado para uso futuro/admin — no se dispara desde la vendedora en esta entrega |
-
-Cualquier otra transición (ej. `confirmado` → `generado`, `rechazado` →
-`confirmado`) se rechaza. La mutación pasa por una Server Action
-(`actualizarEstadoPedido`) que autentica que el pedido pertenece a la
-vendedora **y** valida la transición contra esta tabla antes de escribir
-— la RLS (§12) es la red de seguridad, no el único control.
+Sin cambios respecto a la versión anterior — tabla de transiciones,
+trigger `pedidos_validar_transicion`, Server Action
+`actualizarEstadoPedido`.
 
 ## 12. Acceso y RLS
 
-- `pedidos`/`pedido_items`: RLS habilitado.
-  - **Sin policy de insert para `anon`/`authenticated`** — todo insert pasa
-    por `generarPedido` (Server Action) usando `createAdminClient()`
-    después de revalidar todo. El comprador nunca escribe directo a la
-    tabla.
-  - Policy de select para la vendedora: `vianderas_id in (select id from
-    vianderas where user_id = auth.uid())`.
-  - Policy de update para la vendedora: un trigger
-    `pedidos_validar_transicion()` rechaza, para cualquier sesión sin
-    service role, (a) cualquier cambio a `total`, `costo_envio_capturado`,
-    `nombre_comprador`, `telefono_comprador`, `direccion_envio`,
-    `vianderas_id` o `idempotency_key`, y (b) cualquier `(old.estado,
-    new.estado)` que no esté en la tabla de §11 — la vendedora nunca
-    tiene un `UPDATE` general sobre la tabla, ni siquiera limitado a
-    `estado`, sino uno cuyo contenido válido está acotado por trigger.
-  - `pedido_items` no tiene policy de update en absoluto para
-    `authenticated` (son inmutables una vez creados) — la vendedora los
-    lee vía la policy de select de `pedidos` (join).
+Sin cambios respecto a la versión anterior.
 
 ## 13. Cobertura de TDD requerida
 
-Funciones puras, sin I/O, testeadas antes de integrarlas:
+Funciones puras:
 
-1. `calcularTotal(items, costoEnvio)` — suma exacta, casos: cantidad
-   cero/negativa rechazada por tipo, precio con decimales, envío cero,
-   lista vacía (debería ser un estado de error en la capa de arriba, no un
-   total de $0 silencioso).
-2. `detectarCambios(itemsCliente, itemsServidor)` — dado lo que el
-   cliente cree tener vs. lo que el servidor ve ahora mismo (precio,
-   disponibilidad), devuelve la lista de diffs (`plato_no_disponible`,
-   `precio_cambio` con valor anterior/nuevo). Vacío significa "todo
-   coincide, se puede confirmar".
-3. `validarUnaSolaCocina(items)` — dado un array de `{vianderaId, ...}`,
-   `true` solo si todos comparten la misma `vianderaId`.
-4. `construirMensajePedido(pedido)` — determinístico, un test por cada
-   pieza de contenido obligatorio de §10 (aparece el total, aparece cada
-   ítem, aparece el costo de envío solo si `costoEnvio > 0`, nunca aparece
-   el teléfono del comprador).
-5. `resolverModalidadesDisponibles(viandera, adhesionPuni)` — reexporta
-   `modalidadesDisponibles`/`costoEnvioVigente` de la spec de Envíos/Puni
-   §9: **una modalidad con costo `null` no aparece en el resultado**
-   (retiro siempre disponible con costo `0`; envío propio solo si
-   `costo_envio_propio` no es `null`; Puni solo si `estado === 'aprobada'`
-   **y** la vendedora ya cargó su costo).
-6. `transicionValidaPedido(desde, hacia)` — un test por cada fila de la
-   tabla de §11, más casos explícitamente rechazados (`confirmado` →
-   `generado`, `rechazado` → `confirmado`, cualquier valor hacia sí
-   mismo).
-7. **Atomicidad de `crear_pedido_atomico`** (test de integración contra
-   una base de test real, no un mock — ver plan): un pedido con 2+ ítems
-   se crea con todas sus filas o ninguna; forzar un fallo a mitad de
-   camino (ej. un ítem con `cantidad` inválida que pasa la validación de
-   la Server Action pero no el `check` de la tabla) y confirmar que
-   **no queda ningún `pedidos` residual sin ítems**.
-8. **Reutilización de `idempotency_key`** con el mismo contenido devuelve
-   el mismo pedido sin insertar filas nuevas; con contenido **distinto**
-   rechaza explícitamente en vez de sobrescribir.
-9. **Limitador de abuso**: excede el límite por sesión → rechaza sin
-   tocar `pedidos`; excede el límite global → rechaza; una sesión nueva
-   con el límite por sesión no excedido pero el global sí, también
-   rechaza (el global es un techo duro, no se elude teniendo cupo
-   individual).
-10. **Costo `null` bloqueado, costo `0` válido**: un test explícito de
-    que una modalidad con costo `null` nunca llega a `calcularTotal` (se
-    filtra antes, en `resolverModalidadesDisponibles`), y que un costo
-    `0` configurado explícitamente sí se acepta y se suma como `0` sin
-    error ni advertencia.
-11. **Imposibilidad de leer `nota_admin` públicamente**: test de
-    integración (o de la función/consulta server-only, ver spec de
-    Envíos/Puni §5) que confirma que ninguna consulta accesible desde
-    `anon`/`authenticated` puede recuperar `nota_admin`, `resuelto_por`
-    ni ninguna columna de auditoría de `puni_adhesiones`.
+1. `calcularTotal(items, costoEnvio)` — **corregido en esta revisión**:
+   además de los casos ya cubiertos (suma exacta, lista vacía, precio/
+   cantidad negativos), rechaza explícitamente `null`, `NaN` e
+   `Infinity` en `costoEnvio`, en `precioCapturado`, y en `cantidad` —
+   el bug encontrado por la revisión: `100 + null` en JavaScript es
+   `100`, no un error, así que la validación previa
+   (`item.precioCapturado < 0`) no atrapaba un `null` (`null < 0` es
+   `false`). El nuevo test se escribe primero, confirmando que falla
+   contra la implementación vieja, antes de corregir con
+   `Number.isFinite()` en cada valor. `0` sigue siendo válido en
+   cualquiera de los tres campos.
+2. `detectarCambios`, `validarUnaSolaCocina`, `construirMensajePedido`,
+   `resolverModalidadesDisponibles`, `transicionValidaPedido` — sin
+   cambios respecto a la versión anterior.
+6. `debeLimitar(intentos, limite)` — **corregido**: semántica exacta de
+   §7 (`intentos > limite`, no `>=`) — con un límite de 5, el test
+   confirma que `debeLimitar(5, 5)` es `false` (la 5ª solicitud se
+   permite) y `debeLimitar(6, 5)` es `true` (la 6ª se bloquea).
+7. `hmacIp(ip, secreto)` — determinístico, nunca contiene la IP original
+   en el resultado, dos IPs distintas producen hashes distintos, la
+   misma IP con secretos distintos también (para poder rotar el secreto
+   sin colisiones accidentales).
+
+Tests de integración (contra Postgres real — ver plan, Task 0, incluida
+la resolución del bloqueo de infraestructura):
+
+8. **Dos llamadas concurrentes con la misma `idempotency_key` y
+   contenido idéntico crean una sola orden** — disparadas realmente en
+   paralelo (no secuencialmente con un mock), verificando que
+   `pedido_items` tiene exactamente la cantidad de filas de un pedido,
+   no el doble.
+9. **Misma key, mismo contenido, ítems en distinto orden** → mismo
+   `request_hash`, mismo pedido devuelto.
+10. **Misma key con dirección, modalidad o costo distintos** → rechazo
+    explícito.
+11. **Cambio de precio concurrente detectado dentro de la transacción**:
+    una transacción bloqueada, mientras espera, tiene su fila de
+    `viandas` modificada por otra sesión antes de que la primera
+    obtenga el lock — al obtenerlo, ve el precio nuevo y lo reporta como
+    cambio (o lo usa como capturado, según corresponda al orden real de
+    commits) — este es el test que confirma que la corrección de §6
+    (validar dentro de la transacción, no antes) efectivamente cierra la
+    carrera.
+12. **El total en la base coincide exactamente con la suma de
+    `pedido_items.subtotal` más `costo_envio_capturado`** — verificado
+    leyendo la fila insertada, no solo confiando en el valor devuelto
+    por la función.
+13. **Array de ítems vacío, ítem duplicado (mismo `vianda_id` dos
+    veces), y cantidad fuera de rango** — los tres rechazados por la
+    función antes de bloquear ninguna fila de `viandas`.
+14. **`null`/`NaN`/`Infinity` rechazados en runtime** — ver punto 1.
+15. **Sexta solicitud bloqueada cuando el límite es 5** — ver punto 6,
+    ahora como test de integración contra la tabla real de contadores
+    (no solo la función pura `debeLimitar`).
+16. **Rotar el identificador de sesión (cookie) no evade el límite
+    real** — generar una request con una sesión nueva pero la misma IP
+    (hasheada) ya en el límite, confirmar que sigue bloqueada por la
+    capa de IP aunque la capa de sesión esté en cero.
+17. **El cron sin `CRON_SECRET` configurado rechaza** (falla cerrado,
+    no autoriza por ausencia de secreto).
+18. **Un fallo en la escritura del purgado devuelve error y no informa
+    éxito** — mockear/forzar un error en el `update` del servicio de
+    purgado y confirmar que la respuesta refleja el fallo, no
+    `purgados: N` con `N > 0`.
+19. **Imposibilidad de leer `nota_admin` públicamente** — ver spec de
+    Envíos/Puni (corregida en esta revisión: ni siquiera la vendedora
+    lee la tabla directo).
 
 ## 14. Fuera de alcance de esta entrega
 
-- Pagos online de cualquier tipo.
-- Notificaciones push/email al vendedor (se entera por WhatsApp, que es
-  justamente el canal).
-- Edición de un pedido ya generado por parte del comprador.
-- Multi-cocina en un solo pedido.
-- Cancelación automática por timeout (el estado `cancelado` existe en el
-  enum para uso futuro/manual, no se dispara solo en esta entrega).
+Sin cambios respecto a la versión anterior.
