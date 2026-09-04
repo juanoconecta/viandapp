@@ -7,6 +7,30 @@ export default function PortadaHero() {
   return (
     <section className="bg-teal">
       {/*
+        Precarga solo la variante de la foto 0 (candidata a LCP) que
+        corresponde al viewport real — el mismo corte lg (1024px) que usa
+        el <picture> en HeroCarousel. `next/image` con `priority` precarga
+        siempre la variante de escritorio incluso en mobile; estos dos
+        <link> reemplazan esa precarga automática por una por breakpoint,
+        así el navegador nunca baja ambas.
+      */}
+      <link
+        rel="preload"
+        as="image"
+        type="image/avif"
+        href="/portada/carrusel-01-desktop.avif"
+        media="(min-width: 1024px)"
+        fetchPriority="high"
+      />
+      <link
+        rel="preload"
+        as="image"
+        type="image/avif"
+        href="/portada/carrusel-01-mobile.avif"
+        media="(max-width: 1023.98px)"
+        fetchPriority="high"
+      />
+      {/*
         Tres composiciones según ancho, no dos:
         - < md (mobile): apilado, una columna — grid-cols-1 por defecto.
         - md–lg (768–1023): dos columnas compactas y contenidas (mismo

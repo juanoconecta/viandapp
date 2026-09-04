@@ -180,24 +180,50 @@ export default function HeroCarousel({ fotos }: { fotos: FotoCarrusel[] }) {
                 <IconPlato className="h-8 w-8" />
                 <span className="text-sm font-medium">ViandApp</span>
               </div>
+            ) : i === 0 ? (
+              // Foto 0 es siempre la candidata a LCP (primer render,
+              // `estado.indice` arranca en 0). Bajo throttling mobile
+              // real, la variante de escritorio (1200w) tardaba ~2.7s en
+              // bajar por sí sola — medido con Lighthouse
+              // (`--throttling-method=devtools`) contra producción, tres
+              // corridas. Un `<picture>` nativo (no `next/image`, que no
+              // soporta más de una fuente por breakpoint) sirve una
+              // variante recortada al mismo encuadre pero mucho más
+              // liviana en el rango mobile/tablet (<1024px, el mismo
+              // corte que usa el propio carrusel para el layout
+              // horizontal de escritorio), sin bajar nunca las dos.
+              <picture>
+                <source
+                  media="(min-width: 1024px)"
+                  type="image/avif"
+                  srcSet="/portada/carrusel-01-desktop.avif"
+                />
+                <source
+                  media="(min-width: 1024px)"
+                  type="image/webp"
+                  srcSet="/portada/carrusel-01-desktop.webp"
+                />
+                <source
+                  media="(max-width: 1023.98px)"
+                  type="image/avif"
+                  srcSet="/portada/carrusel-01-mobile.avif"
+                />
+                <img
+                  src="/portada/carrusel-01-mobile.webp"
+                  alt={foto.alt}
+                  fetchPriority="high"
+                  decoding="async"
+                  className="absolute inset-0 h-full w-full object-cover"
+                  onLoad={() => setCargadas((prev) => new Set(prev).add(i))}
+                  onError={() => setFallidas((prev) => new Set(prev).add(i))}
+                />
+              </picture>
             ) : (
               <Image
                 src={foto.src}
                 alt={foto.alt}
                 fill
                 sizes="(min-width: 1024px) 45vw, 100vw"
-                priority={i === 0}
-                // `priority` por sí solo ya genera el <link rel="preload">
-                // en el <head> (confirmado — la imagen se descubre antes
-                // de que React hidrate), pero en esta versión de Next NO
-                // agrega `fetchpriority="high"` ni al link ni al <img>
-                // (confirmado con Lighthouse: "LCP request discovery"
-                // fallaba en `priorityHinted`). `fetchPriority` es una
-                // prop separada y reconocida por `next/image` — se pasa
-                // explícitamente solo en la primera foto, la única que
-                // debe competir de verdad por ancho de banda apenas carga
-                // la página.
-                fetchPriority={i === 0 ? "high" : undefined}
                 className="object-cover"
                 onLoad={() => setCargadas((prev) => new Set(prev).add(i))}
                 onError={() => setFallidas((prev) => new Set(prev).add(i))}
