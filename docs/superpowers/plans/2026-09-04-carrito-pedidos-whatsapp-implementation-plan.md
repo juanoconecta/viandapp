@@ -14,9 +14,8 @@ transacción (Task 1) en vez de confiar en una lectura previa;
 server-emitida como señal secundaria (nunca frontera de seguridad), y
 límite global convertido en circuito de emergencia de umbral alto
 (Task 1, Task 3); cron falla cerrado y comparte servicio de purgado con
-la limpieza del limitador (Task 7); Task 0 ofrece dos caminos concretos
-para la infraestructura de integración porque **esta máquina no tiene
-Docker Desktop instalado** (verificado); 12 tests de integración nuevos
+la limpieza del limitador (Task 7); Task 0 fija `viandapp-staging` como
+infraestructura de integración aislada; 12 tests de integración nuevos
 (Task 8, nueva).
 
 **Objetivo:** carrito de una sola cocina (client-side), pedido creado
@@ -74,51 +73,40 @@ Postgres real (Task 0), Vercel Cron.
 
 ---
 
-### Task 0: Infraestructura de tests de integración — bloqueante, dos caminos
+### Task 0: Infraestructura de tests de integración — bloqueante
 
-**Confirmado**: esta máquina no tiene Docker Desktop instalado (`docker
---version` no encuentra el binario). No se puede levantar Supabase local
-hoy sin una acción explícita del usuario. Dos caminos concretos, a
-elegir por el usuario antes de continuar:
+**Decisión aprobada**: los tests de integración usan exclusivamente el
+proyecto Supabase staging separado `viandapp-staging`. El proyecto gratuito
+puede pausarse sin afectar producción y debe reactivarse antes de los tests.
+Nunca se usan producción, credenciales de producción ni migraciones
+experimentales contra producción.
 
-**Camino A — instalar Docker Desktop.**
-- [ ] El usuario instala/autoriza Docker Desktop en esta máquina.
-- [ ] `supabase start` (Supabase CLI) levanta Postgres local.
-- [ ] Los tests de integración apuntan a las credenciales locales que
-  imprime `supabase start` — nunca a producción.
-
-**Camino B — proyecto Supabase de staging separado.**
-- [ ] El usuario crea (o designa) un proyecto Supabase distinto del de
-  producción, exclusivamente para tests de integración.
-- [ ] Los tests de integración apuntan a las credenciales de ese
-  proyecto de staging vía variables de entorno propias
-  (`SUPABASE_STAGING_URL`, `SUPABASE_STAGING_SERVICE_ROLE_KEY` — nunca
-  las mismas variables que apuntan a producción, para que sea imposible
-  correr un test destructivo contra el proyecto real por error de
-  configuración).
-- [ ] **Nunca** se corren pruebas destructivas ni migraciones
-  experimentales contra el proyecto de producción — el proyecto de
-  staging es prescindible/reseteable, el de producción no.
-
-**Files** (comunes a ambos caminos):
+**Files:**
+- Create: `.env.integration.example`
 - Create: `vitest.integration.config.ts`
-- Create: `lib/testing/clienteIntegracion.ts` (lee las credenciales de
-  variables de entorno — `SUPABASE_STAGING_*` o las locales de
-  `supabase start`, nunca hardcodeadas, nunca las de producción)
-- Create: `docs/testing-integracion.md` (documenta ambos caminos, cómo
-  aplicar las migraciones de este plan y de Envíos/Puni contra el target
-  elegido antes de correr `npm run test:integration`)
-- Modify: `package.json` — script `test:integration`
+- Create: `lib/testing/clienteIntegracion.ts`
+- Create: `lib/testing/clienteIntegracion.test.ts`
+- Create: `docs/testing-integracion.md`
+- Modify: `package.json`
 
-- [ ] **Paso 1: Confirmar con el usuario cuál camino elige** (A o B) —
-  no se asume ninguno.
-- [ ] **Paso 2: Documentar el procedimiento elegido** en
-  `docs/testing-integracion.md`.
-- [ ] **Paso 3: Commit**
+- [x] **Paso 1: Fijar staging aislado** con las variables
+  `INTEGRATION_SUPABASE_URL`, `INTEGRATION_SUPABASE_SERVICE_ROLE_KEY` e
+  `INTEGRATION_ALLOW_REMOTE_DATABASE=viandapp-staging`.
+- [x] **Paso 2: Agregar el guard de entorno**, que rechaza credenciales
+  faltantes, coincidencia con `NEXT_PUBLIC_SUPABASE_URL` y cualquier staging
+  remoto distinto de `viandapp-staging`.
+- [x] **Paso 3: Configurar Vitest** para `**/*.integration.test.ts` en
+  entorno node, sin paralelismo de archivos y con timeout de 30 segundos.
+- [x] **Paso 4: Documentar el flujo local** y la limpieza de datos
+  sintéticos por IDs generados por cada test.
+- [ ] **Paso 5: Gate de Carrito/Pedidos pendiente.** No continuar a Task 1
+  hasta que la migración esté autorizada, aplicada y validada en
+  `viandapp-staging`. Registrar entonces el commit y la fecha; aún no hay
+  valores para registrar.
 
 ```bash
-git add vitest.integration.config.ts lib/testing/clienteIntegracion.ts docs/testing-integracion.md package.json
-git commit -m "chore: add integration test infrastructure (local or staging Supabase)"
+git add .env.integration.example vitest.integration.config.ts lib/testing/clienteIntegracion.ts lib/testing/clienteIntegracion.test.ts docs/testing-integracion.md package.json docs/superpowers/plans/2026-09-04-carrito-pedidos-whatsapp-implementation-plan.md
+git commit -m "test: fix integration environment to isolated Supabase staging"
 ```
 
 **No continuar a las Tasks que requieren test de integración (marcadas
