@@ -7,7 +7,7 @@ describe("calcularTotal", () => {
       { precioCapturado: 4200, cantidad: 2 },
       { precioCapturado: 2800, cantidad: 1 },
     ];
-    expect(calcularTotal(items, 600)).toBe(4200 * 2 + 2800 + 600);
+    expect(calcularTotal(items, 600)).toBe(11800);
   });
 
   it("envio en cero es valido", () => {
@@ -21,6 +21,10 @@ describe("calcularTotal", () => {
   it("lanza si algun precio o cantidad es negativo", () => {
     expect(() => calcularTotal([{ precioCapturado: -1, cantidad: 1 }], 0)).toThrow();
     expect(() => calcularTotal([{ precioCapturado: 100, cantidad: 0 }], 0)).toThrow();
+  });
+
+  it("lanza si la cantidad no es entera", () => {
+    expect(() => calcularTotal([{ precioCapturado: 100, cantidad: 1.5 }], 0)).toThrow();
   });
 
   it("respeta decimales de precio", () => {
