@@ -1,5 +1,8 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { cargarEntornoIntegracion } from "./lib/testing/cargarEntornoIntegracion";
+
+cargarEntornoIntegracion();
 
 export default defineConfig({
   resolve: {
