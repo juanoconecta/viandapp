@@ -1,0 +1,62 @@
+"use client";
+
+import { useRef } from "react";
+import { useCarrito } from "./CarritoProvider";
+
+const botonClase = "inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-line px-3 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral-600";
+
+export default function BotonAgregarAlCarrito({
+  vianderaId,
+  platoId,
+  nombre,
+}: {
+  vianderaId: string;
+  platoId: string;
+  nombre: string;
+}) {
+  const { carrito, hidratado, agregar, incrementar, decrementar, reemplazar } = useCarrito();
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const cantidad = carrito?.vianderaId === vianderaId
+    ? carrito.items.find((item) => item.platoId === platoId)?.cantidad
+    : undefined;
+
+  function intentarAgregar() {
+    const resultado = agregar(vianderaId, platoId);
+    if (resultado.tipo === "requiere_reemplazo") dialogRef.current?.showModal();
+  }
+
+  return (
+    <>
+      {hidratado && cantidad ? (
+        <div className="flex items-center gap-1" aria-label={`Cantidad de ${nombre}`}>
+          <button type="button" onClick={() => decrementar(platoId)} aria-label={`Quitar una ${nombre}`} className={`${botonClase} border-teal text-teal`}>−</button>
+          <output aria-live="polite" className="min-w-7 text-center font-display font-bold text-ink">{cantidad}</output>
+          <button type="button" onClick={() => incrementar(platoId)} aria-label={`Agregar una ${nombre}`} className={`${botonClase} border-teal text-teal`}>+</button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={intentarAgregar}
+          aria-label={`Agregar ${nombre} al pedido`}
+          className={`${botonClase} border-coral-600 bg-coral-600 text-white hover:bg-coral-700`}
+        >
+          Agregar
+        </button>
+      )}
+
+      <dialog
+        ref={dialogRef}
+        aria-labelledby={`reemplazo-${platoId}`}
+        onClick={(evento) => { if (evento.target === dialogRef.current) dialogRef.current.close(); }}
+        className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-3xl border border-line bg-card p-5 text-ink shadow-xl backdrop:bg-ink/40"
+      >
+        <h2 id={`reemplazo-${platoId}`} className="font-display text-xl font-bold">Tu pedido actual es de otra cocina</h2>
+        <p className="mt-2 text-sm text-ink-muted">Para pedir acá tenés que empezar un pedido nuevo.</p>
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row-reverse">
+          <button type="button" onClick={() => { reemplazar(vianderaId, platoId); dialogRef.current?.close(); }} className={`${botonClase} flex-1 border-coral-600 bg-coral-600 text-white`}>Empezar uno nuevo</button>
+          <button type="button" onClick={() => dialogRef.current?.close()} className={`${botonClase} flex-1 text-ink`}>Conservar pedido</button>
+        </div>
+      </dialog>
+    </>
+  );
+}
