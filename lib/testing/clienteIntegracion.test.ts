@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { crearClienteIntegracion } from "./clienteIntegracion";
 
-const entornoValido = {
+const entornoValido: NodeJS.ProcessEnv = {
+  NODE_ENV: "test",
   INTEGRATION_SUPABASE_URL: "https://viandapp-staging.supabase.co",
   INTEGRATION_SUPABASE_SERVICE_ROLE_KEY: "staging-service-role-key",
   INTEGRATION_ALLOW_REMOTE_DATABASE: "viandapp-staging",

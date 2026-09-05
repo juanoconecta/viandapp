@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { construirMensajePedido } from "./mensaje";
+import { construirMensajePedido, type DatosMensajePedido } from "./mensaje";
+
+const casosInvalidos = [
+  ["nombre de cocina vacio", { vianderaNombre: "  " }],
+  ["nombre de comprador vacio", { nombreComprador: "  " }],
+  ["lista de items vacia", { items: [] }],
+  ["direccion ausente para envio", { modalidad: "envio_puni", direccionEnvio: null }],
+  ["direccion vacia para envio", { modalidad: "envio_propio", direccionEnvio: "  " }],
+  ["costo de envio negativo", { costoEnvio: -1 }],
+  ["total no finito", { total: Infinity }],
+  ["precio de item negativo", { items: [{ nombre: "Sopa", precioCapturado: -1, cantidad: 1 }] }],
+  ["cantidad cero", { items: [{ nombre: "Sopa", precioCapturado: 1, cantidad: 0 }] }],
+  ["cantidad fraccionaria", { items: [{ nombre: "Sopa", precioCapturado: 1, cantidad: 1.5 }] }],
+] satisfies ReadonlyArray<readonly [string, Partial<DatosMensajePedido>]>;
 
 describe("construirMensajePedido", () => {
   it("construye literalmente el mensaje de envio con los datos normalizados y el total autoritativo", () => {
@@ -63,18 +76,7 @@ describe("construirMensajePedido", () => {
     ).toContain("Modalidad: Envío con Puni");
   });
 
-  it.each([
-    ["nombre de cocina vacio", { vianderaNombre: "  " }],
-    ["nombre de comprador vacio", { nombreComprador: "  " }],
-    ["lista de items vacia", { items: [] }],
-    ["direccion ausente para envio", { modalidad: "envio_puni", direccionEnvio: null }],
-    ["direccion vacia para envio", { modalidad: "envio_propio", direccionEnvio: "  " }],
-    ["costo de envio negativo", { costoEnvio: -1 }],
-    ["total no finito", { total: Infinity }],
-    ["precio de item negativo", { items: [{ nombre: "Sopa", precioCapturado: -1, cantidad: 1 }] }],
-    ["cantidad cero", { items: [{ nombre: "Sopa", precioCapturado: 1, cantidad: 0 }] }],
-    ["cantidad fraccionaria", { items: [{ nombre: "Sopa", precioCapturado: 1, cantidad: 1.5 }] }],
-  ])("rechaza %s", (_caso, parcial) => {
+  it.each(casosInvalidos)("rechaza %s", (_caso, parcial) => {
     expect(() =>
       construirMensajePedido({
         vianderaNombre: "Cocina",
