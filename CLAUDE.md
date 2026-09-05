@@ -91,9 +91,10 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 ADMIN_EMAIL=
+RATE_LIMIT_SECRET=
 ```
 
-Las últimas dos son server-only — nunca `NEXT_PUBLIC_`, nunca importadas
+Las tres últimas son server-only — nunca `NEXT_PUBLIC_`, nunca importadas
 desde un archivo `'use client'`. Se usan para el panel de admin (`/admin`)
 y el panel de viandera (`/viandera`): invitar cuentas, vincular la cuenta
 de una viandera a su fila en `vianderas`, y verificar quién es el admin sin
