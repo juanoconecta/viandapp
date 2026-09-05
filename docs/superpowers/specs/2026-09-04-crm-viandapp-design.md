@@ -1,34 +1,42 @@
 # CRM general de ViandApp — Diseño
 
-**Fecha:** 2026-09-04 (segunda revisión correctiva 2026-09-04)
-**Estado:** Corregido tras la segunda revisión de Codex sobre el commit
-`2ee4acc` — pendiente de una tercera revisión antes de implementar.
-Cambios de esta revisión: interesados de la landing y cocinas activas se
-sincronizan **automática e idempotentemente** (ya no manual, §6);
-deduplicación de consumidores por **contacto normalizado** (teléfono
-internacional o email), no por texto crudo (§3, §9); **retiro de
-consentimiento** con exclusión inmediata y posibilidad de anonimizar PII
-conservando solo relaciones operativas (§9, nueva sección); confirmado
-explícitamente que un pedido sin consentimiento **nunca** puede
-convertirse manualmente en ficha comercial durable (§6, corrige un
-permiso que la revisión anterior sí dejaba abierto).
-**Depende de:** nada técnicamente, pero se implementa último. El trigger
-que auto-vincula un pedido consentido, y los triggers nuevos sobre
-`interesados_viandera`/`vianderas`, se agregan sobre esas tablas ya
-existentes desde la migración de CRM — ningún otro plan necesita saber
-que el CRM existe.
+**Fecha:** 2026-09-04 (tercera revisión correctiva y aprobación 2026-09-04)
+**Estado:** Diseño aprobado por el usuario; listo para actualizar el plan
+de implementación. Esta tercera revisión cierra la arquitectura del panel
+administrativo, el entorno de staging y la normalización telefónica que la
+revisión anterior describía de forma contradictoria.
+
+**Decisiones cerradas:** CRM integrado en la misma aplicación Next.js y
+el mismo modelo Supabase de ViandApp; un único administrador configurado
+por `ADMIN_EMAIL`; `/admin` pasa a ser el tablero general; CRM, pedidos y
+Puni viven como módulos separados dentro del administrador; las pruebas de
+integración se ejecutan en un proyecto Supabase separado llamado
+`viandapp-staging`, sin copiar datos personales de producción.
+
+**Depende de:** el plan de Carrito y pedidos implementado y migrado primero,
+porque `crm_contacto_pedidos` y el trigger de consumidores referencian las
+tablas `pedidos`/`pedido_items`. Los triggers sobre
+`interesados_viandera` y `vianderas` sí se apoyan en tablas ya existentes.
 
 ## 1. Objetivo
 
-Sin cambios respecto a la versión anterior.
+Convertir el actual `/admin` puntual en el administrador general de
+ViandApp. El sistema reúne contactos comerciales, cocinas potenciales y
+activas, consumidores que dieron consentimiento, aliados, notas, tareas,
+interacciones y pedidos vinculados. La administración de adhesiones a Puni
+se conserva como un módulo del mismo panel, no como la totalidad del panel.
+
+El CRM se construye dentro de ViandApp: no se crea una segunda aplicación
+ni se sincroniza con un proveedor de CRM externo. El objetivo inicial es
+una operación personal, segura y trazable para un único administrador.
 
 ## 2. Principio rector: vínculo, no copia — con una excepción explícita y ahora revocable
 
-Sin cambios de fondo respecto a la versión anterior — cada
-`crm_contactos` referencia como máximo una tabla especializada, o guarda
-`nombre_libre` si no hay ninguna. La excepción de consumidores con
-consentimiento de marketing (copia durable) se mantiene, **pero ahora es
-revocable** — ver §9.
+Cada `crm_contactos` referencia como máximo una tabla especializada, o
+guarda `nombre_libre` si no hay ninguna. Los datos de una cocina o un
+interesado se consultan desde su registro fuente y no se duplican. La única
+excepción es el consumidor que dio consentimiento de marketing: su copia
+durable es explícita y revocable — ver §9.
 
 ## 3. Modelo de datos
 
@@ -42,50 +50,78 @@ revocable** — ver §9.
 | `interesado_id` | `uuid` | FK a `interesados_viandera`, nullable |
 | `nombre_libre` | `text` | Obligatorio si no hay `viandera_id`/`interesado_id` |
 | `contacto_libre` | `text` | Teléfono/email libre tal como se ingresó — **valor de exhibición**, no el usado para deduplicar |
-| `contacto_normalizado` | `text` | **Nueva en esta revisión** — `generated always as (public.crm_normalizar_contacto(tipo, contacto_libre)) stored`. Es la columna que se usa para deduplicar (§9), nunca `contacto_libre` crudo. |
+| `contacto_normalizado` | `text` | `generated always as (public.crm_normalizar_contacto(contacto_libre)) stored`. Es la columna que se usa para deduplicar (§9), nunca `contacto_libre` crudo. |
 | `fuente` | `text` | `check in ('landing_interes','explorador','pedido','referido','contacto_directo','otro')` |
 | `estado` | `text` | `check in ('nuevo','en_conversacion','calificado','activo','inactivo','descartado')` |
 | `etiquetas` | `text[]` | Libres |
-| `consentimiento_retirado_en` | `timestamptz` | **Nueva en esta revisión** — nullable; no-nulo excluye inmediatamente al contacto de cualquier acción comercial (§9) |
-| `pii_eliminada` | `boolean` | **Nueva en esta revisión** — `not null default false`; `true` cuando el admin anonimizó `nombre_libre`/`contacto_libre` (§9) |
+| `consentimiento_retirado_en` | `timestamptz` | Nullable; no-nulo excluye inmediatamente al contacto de cualquier acción comercial (§9) |
+| `pii_eliminada` | `boolean` | `not null default false`; `true` cuando el admin anonimizó `nombre_libre`/`contacto_libre` (§9) |
 | `created_at` / `updated_at` | `timestamptz` | |
 
-Constraints: sin cambios respecto a la versión anterior
-(`crm_contactos_un_solo_vinculo`, `crm_contactos_libre_o_vinculado`).
+Constraints:
+
+- `crm_contactos_un_solo_vinculo`: como máximo uno entre `viandera_id`
+  e `interesado_id`.
+- `crm_contactos_libre_o_vinculado`: exige una fuente vinculada,
+  `nombre_libre` o `pii_eliminada = true`. La última alternativa permite
+  conservar una fila anónima sin violar la constraint.
+- `crm_contactos_anonimizacion_consistente`: si `pii_eliminada = true`,
+  el tipo es `consumidor`, ambos vínculos y los campos `nombre_libre`/
+  `contacto_libre` son `null`, y `consentimiento_retirado_en` no es
+  `null`. Una cocina o interesado no puede marcarse como anonimizado
+  mientras su PII siga viva en la tabla fuente.
 
 ### `crm_contacto_pedidos`
 
-Sin cambios respecto a la versión anterior — tabla puente, PK compuesta
-como garantía de idempotencia.
+Tabla puente entre contactos y pedidos. Contiene `contacto_id`,
+`pedido_id` y `created_at`; su PK compuesta (`contacto_id`, `pedido_id`)
+impide registrar dos veces el mismo vínculo.
 
 ### `crm_notas`, `crm_tareas`, `crm_interacciones`
 
-Sin cambios.
+- `crm_notas`: texto administrativo de 1 a 2000 caracteres asociado a un
+  contacto.
+- `crm_tareas`: título, vencimiento opcional y estado de finalización con
+  timestamp consistente.
+- `crm_interacciones`: llamada, WhatsApp, email, reunión, cambio de estado
+  u otro evento, con resumen y metadata JSON acotada a un objeto.
 
 ## 4. Acceso y RLS
 
-Sin cambios — 100% admin-only, RLS habilitado, cero policies en las
-cinco tablas.
+El CRM es 100% admin-only. Las cinco tablas tienen RLS habilitado y cero
+policies. Cada Server Action autentica al usuario y verifica `esAdmin()`
+antes de crear el cliente con `service_role`.
+
+En esta etapa hay un único administrador, identificado por comparación
+case-insensitive contra `ADMIN_EMAIL`. No se agregan roles, invitaciones ni
+una tabla de miembros. Si el producto incorpora equipo en el futuro, eso
+requerirá un diseño de autorización independiente.
 
 ## 5. Vistas de lectura para la UI del panel
 
-Sin cambios de fondo respecto a la versión anterior —
-`crm_contactos_resumen` con el mismo `coalesce`. **Ajuste**: la vista
-también expone `consentimiento_retirado_en` y `pii_eliminada`, para que
-la UI pueda mostrar claramente el estado de consentimiento de cada
-contacto sin una consulta aparte.
+`crm_contactos_resumen` resuelve nombre y contacto desde la fuente
+vinculada (`vianderas` o `interesados_viandera`) y usa los campos libres
+solo para contactos sin fuente especializada. Nunca usa el último pedido
+como fallback: hacerlo expondría nuevamente la PII de un consumidor
+anonimizado o de un pedido sin consentimiento. Cuando
+`pii_eliminada = true`, la vista devuelve `null` explícitamente para
+nombre y contacto. También expone `consentimiento_retirado_en` y
+`pii_eliminada`, para que la UI muestre ese estado sin otra consulta.
 
 ## 6. Altas al CRM
 
 ### Interesados de la landing y cocinas activas: automáticas e idempotentes
 
-**Corregido en esta revisión** — revierte la decisión "manual, botón
-'Agregar a CRM'" de la versión anterior. Ambas fuentes se sincronizan
-solas, vía trigger, en el momento en que la fila especializada se crea:
+Ambas fuentes se sincronizan solas, vía trigger, en el momento en que la
+fila especializada se crea:
 
 ```sql
 create or replace function public.crm_sincronizar_interesado()
-returns trigger language plpgsql as $$
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
 begin
   insert into public.crm_contactos (tipo, interesado_id, fuente, estado)
   values ('cocina_potencial', new.id, 'landing_interes', 'nuevo')
@@ -94,13 +130,20 @@ begin
 end;
 $$;
 
+revoke all on function public.crm_sincronizar_interesado()
+from public, anon, authenticated;
+
 drop trigger if exists crm_sincronizar_interesado_trigger on public.interesados_viandera;
 create trigger crm_sincronizar_interesado_trigger
 after insert on public.interesados_viandera
 for each row execute function public.crm_sincronizar_interesado();
 
 create or replace function public.crm_sincronizar_viandera()
-returns trigger language plpgsql as $$
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
 begin
   insert into public.crm_contactos (tipo, viandera_id, fuente, estado)
   values ('cocina_activa', new.id, 'contacto_directo', 'nuevo')
@@ -109,10 +152,24 @@ begin
 end;
 $$;
 
+revoke all on function public.crm_sincronizar_viandera()
+from public, anon, authenticated;
+
 drop trigger if exists crm_sincronizar_viandera_trigger on public.vianderas;
 create trigger crm_sincronizar_viandera_trigger
 after insert on public.vianderas
 for each row execute function public.crm_sincronizar_viandera();
+
+-- Backfill idempotente: los triggers solo cubren filas nuevas.
+insert into public.crm_contactos (tipo, interesado_id, fuente, estado)
+select 'cocina_potencial', i.id, 'landing_interes', 'nuevo'
+from public.interesados_viandera i
+on conflict (interesado_id) where interesado_id is not null do nothing;
+
+insert into public.crm_contactos (tipo, viandera_id, fuente, estado)
+select 'cocina_activa', v.id, 'contacto_directo', 'nuevo'
+from public.vianderas v
+on conflict (viandera_id) where viandera_id is not null do nothing;
 ```
 
 `on conflict ... do nothing` sobre el índice único parcial ya existente
@@ -121,24 +178,24 @@ ejemplo, si se re-ejecuta el trigger en un escenario de prueba, o si el
 admin la había vinculado manualmente antes de que este trigger
 existiera) no genera una segunda.
 
-Por qué el cambio de decisión respecto a la versión anterior: la razón
-original ("automatizarlo genera ruido en la fase de validación de
-mercado") sigue siendo válida como preocupación de UX, pero la revisión
-prioriza que el CRM sea una fuente de verdad **completa** — un admin que
-tiene que acordarse de un botón para cada lead nuevo es exactamente el
-tipo de dependencia frágil que un CRM debería eliminar. El "ruido" se
-maneja filtrando por `estado` en el panel (los nuevos entran en
-`'nuevo'`, no exigen atención inmediata), no dejando de sincronizar.
+La sincronización automática prioriza que el CRM sea una fuente de verdad
+**completa**. El posible ruido se maneja filtrando por `estado` en el panel
+(los nuevos entran en `'nuevo'` y no exigen atención inmediata), no
+dependiendo de que el administrador recuerde un botón para cada lead.
+
+Los triggers son `SECURITY DEFINER` porque el alta pública de
+`interesados_viandera` corre como `anon`, que no tiene acceso a las tablas
+CRM. El cuerpo usa nombres calificados, `search_path` vacío y valores fijos;
+además se revoca su ejecución directa. Así el formulario público puede
+crear el contacto derivado sin abrir una policy sobre el CRM. El backfill
+de la misma migración incorpora filas preexistentes de forma idempotente.
 
 ### Consumidores: automático, condicionado a consentimiento de marketing — nunca manual sin consentimiento
 
-Sin cambios de mecanismo respecto a la versión anterior (trigger sobre
-`pedidos`, disparado solo por `acepta_marketing = true`, ver §9) —
-**corrección explícita de esta revisión**: la versión anterior dejaba
-abierta una vía manual para que el admin vinculara un pedido sin
-consentimiento y opcionalmente copiara el nombre de todos modos
-(`copiarNombre: boolean`). **Esa vía se elimina.** Un pedido sin
-`acepta_marketing = true`:
+Un trigger sobre `pedidos`, disparado solo por
+`acepta_marketing = true`, crea o vincula al consumidor — ver §9. No
+existe una vía manual para copiar de forma durable el nombre o teléfono
+de un pedido sin consentimiento. Un pedido sin `acepta_marketing = true`:
 
 - Puede vincularse manualmente a un `crm_contactos` (vía
   `crm_contacto_pedidos`) para trazabilidad operativa — ej. el admin
@@ -152,7 +209,13 @@ consentimiento y opcionalmente copiara el nombre de todos modos
 
 ## 7. Fuera de alcance de esta entrega
 
-Sin cambios respecto a la versión anterior.
+- Equipos, roles o más de un administrador.
+- Envíos masivos de marketing o automatizaciones de contacto.
+- Integración o sincronización con un CRM externo.
+- Pagos online o facturación.
+- Importar PII o una copia de la base de producción al staging.
+- Analítica avanzada de embudos; el tablero inicial usa conteos y estados
+  operativos.
 
 ## 8. Checklist de seguridad y privacidad
 
@@ -161,7 +224,7 @@ Sin cambios respecto a la versión anterior.
 - Copia durable de PII solo con base legal explícita (consentimiento de
   marketing), y ahora **revocable** (§9).
 - `crm_notas.texto`/`crm_interacciones.resumen`: advertencia en la UI.
-- **Nuevo en esta revisión**: un contacto con `consentimiento_retirado_en`
+- Un contacto con `consentimiento_retirado_en`
   no-nulo queda excluido de inmediato de cualquier acción comercial —
   verificado explícitamente en cada Server Action que envíe o programe
   algo hacia un contacto (aunque esta entrega no tiene todavía ninguna
@@ -173,45 +236,44 @@ Sin cambios respecto a la versión anterior.
 
 ### Normalización antes de deduplicar
 
-**Corregido en esta revisión**: la versión anterior deduplicaba
-consumidores por `contacto_libre` **crudo** — dos formatos distintos del
-mismo teléfono (`"3548 635151"` vs. `"+54 9 3548-635151"`) habrían
-creado dos contactos distintos para la misma persona. Se corrige con una
-función de normalización, y la deduplicación pasa a usar
-`contacto_normalizado` (columna generada, §3):
+La deduplicación nunca usa `contacto_libre` crudo. La segunda revisión
+proponía conservar todos los dígitos, pero a la vez afirmaba que
+`"3548 635151"` y `"+54 9 3548-635151"` producirían el mismo valor. Eso
+era falso: el prefijo `549` sobrevivía. Esta tercera revisión define una
+forma canónica comprobable: email en minúsculas y sin espacios externos;
+teléfono solo con dígitos y, cuando el resto tiene exactamente diez
+dígitos nacionales, sin los prefijos argentinos `549` o `54`.
 
 ```sql
-create or replace function public.crm_normalizar_contacto(p_tipo text, p_contacto_libre text)
+create or replace function public.crm_normalizar_contacto(p_contacto_libre text)
 returns text
 language sql
 immutable
 as $$
   select case
     when p_contacto_libre is null then null
-    when p_contacto_libre like '%@%' then lower(trim(p_contacto_libre))
-    else regexp_replace(p_contacto_libre, '[^0-9]', '', 'g')
-  end;
+    when p_contacto_libre like '%@%'
+      then nullif(lower(trim(p_contacto_libre)), '')
+    when digitos ~ '^549[0-9]{10}$' then substring(digitos from 4)
+    when digitos ~ '^54[0-9]{10}$' then substring(digitos from 3)
+    else nullif(digitos, '')
+  end
+  from (
+    select regexp_replace(p_contacto_libre, '[^0-9]', '', 'g') as digitos
+  ) limpio;
 $$;
 ```
 
-Criterio simple y explícito: si el valor tiene un `@`, se trata como
-email (normalizado a minúsculas, sin espacios). Si no, se trata como
-teléfono (se conservan solo los dígitos — mismo criterio de "solo
-dígitos" que ya usa el proyecto en otros lugares de limpieza de
-teléfono). Es una normalización básica, no una validación de formato de
-email ni un parser de números internacionales completo — suficiente
-para el volumen y el caso de uso actual (consolidar reintentos del mismo
-comprador), documentado como tal para no sobre-prometer.
+Criterio deliberadamente acotado: se resuelven los formatos usados por el
+producto (`3548635151`, `+54 3548635151` y `+54 9 3548635151`). No se
+intenta inferir códigos de área ni transformar el prefijo histórico `15`;
+eso requeriría un parser telefónico argentino más amplio. Una cadena vacía
+o sin dígitos normaliza a `null` y no participa del índice único.
 
-**Riesgo de duplicación de lógica, reconocido explícitamente**: esta
-misma normalización tiene que producir el mismo resultado tanto en SQL
-(usada por el trigger de auto-vinculación, §9 más abajo) como en
-cualquier lugar de la aplicación que necesite el mismo criterio (si lo
-hubiera) — al ser una expresión de una sola línea (extraer dígitos, o
-bajar a minúsculas un email), el riesgo de divergencia es bajo, pero el
-plan debe incluir un test que compare explícitamente el comportamiento
-esperado en ambos lados si llega a haber una implementación TypeScript
-equivalente.
+La implementación TypeScript y la función SQL deben compartir los mismos
+casos tabulares: email, número nacional, `+54`, `+54 9`, vacío y entradas
+que no se intentan interpretar. Los tests de integración comparan ambas
+salidas para evitar que la lógica diverja.
 
 Índice único actualizado:
 
@@ -221,35 +283,37 @@ create unique index if not exists crm_contactos_consumidor_unico
   where tipo = 'consumidor' and contacto_normalizado is not null;
 ```
 
-### Reglas de consentimiento (cuatro, mantenidas de la versión anterior)
+### Reglas de consentimiento
 
 1. Interesados/cocinas se incorporan de forma automática e idempotente
    (§6) — sin restricción de consentimiento, no son datos de consumidor.
 2. Los consumidores solo conservan una identidad de CRM duradera cuando
    dieron consentimiento de marketing — trigger `after insert on
    pedidos when (new.acepta_marketing)`, deduplicando por
-   `contacto_normalizado` (actualizado respecto a la versión anterior,
-   que deduplicaba por `contacto_libre` crudo):
+   `contacto_normalizado`:
 
 ```sql
 create or replace function public.crm_vincular_pedido_consentido()
-returns trigger language plpgsql as $$
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
 declare
   v_contacto_id uuid;
-  v_normalizado text;
 begin
   if not new.acepta_marketing then
     return new;
   end if;
-
-  v_normalizado := public.crm_normalizar_contacto('consumidor', new.telefono_comprador);
 
   insert into public.crm_contactos (tipo, nombre_libre, contacto_libre, fuente, estado)
   values ('consumidor', new.nombre_comprador, new.telefono_comprador, 'pedido', 'nuevo')
   on conflict (tipo, contacto_normalizado) where tipo = 'consumidor' and contacto_normalizado is not null
   do update set
     nombre_libre = excluded.nombre_libre,
-    contacto_libre = excluded.contacto_libre
+    contacto_libre = excluded.contacto_libre,
+    consentimiento_retirado_en = null,
+    pii_eliminada = false
   returning id into v_contacto_id;
 
   insert into public.crm_contacto_pedidos (contacto_id, pedido_id)
@@ -259,15 +323,23 @@ begin
   return new;
 end;
 $$;
+
+revoke all on function public.crm_vincular_pedido_consentido()
+from public, anon, authenticated;
 ```
 
 3. Un pedido sin consentimiento sigue visible como operación, pero
    **nunca** puede convertirse manualmente en ficha comercial durable
-   (§6, corregido explícitamente en esta revisión).
+   (§6).
 4. Consentimiento operativo y de marketing quedan completamente
    separados — el trigger lee solo `acepta_marketing`.
+5. Si un consumidor retiró consentimiento pero luego lo otorga de nuevo
+   explícitamente en otro pedido, el conflicto por contacto normalizado
+   reutiliza la ficha no anonimizada y limpia
+   `consentimiento_retirado_en`. Si la ficha anterior fue anonimizada, su
+   contacto normalizado es `null` y se crea una ficha nueva.
 
-### Retiro de consentimiento (nueva sección de esta revisión)
+### Retiro de consentimiento
 
 Un consumidor puede pedir dejar de ser contactado. Dos acciones
 administrativas nuevas, ambas en `app/admin/crm/actions.ts`:
@@ -293,6 +365,10 @@ administrativas nuevas, ambas en `app/admin/crm/actions.ts`:
   saber quién era). Los pedidos mismos (`pedidos.nombre_comprador`, etc.)
   siguen su propio ciclo de purgado de 90 días definido en la spec de
   Carrito y pedidos, sin relación con esta acción.
+- Ambas acciones verifican que `tipo = 'consumidor'`; si el ID pertenece a
+  una cocina, interesado, aliado u otro contacto, no modifican ninguna
+  fila y devuelven un error de dominio. La privacidad de esas fuentes se
+  gestiona en su tabla especializada, no simulando anonimización en el CRM.
 - Un contacto con `pii_eliminada = true` no puede volver a recibir una
   copia durable automáticamente — si esa misma persona vuelve a comprar
   y da consentimiento de nuevo, el trigger de arriba, al deduplicar por
@@ -300,3 +376,41 @@ administrativas nuevas, ambas en `app/admin/crm/actions.ts`:
   porque `contacto_libre` es `null`), **no encuentra conflicto** y crea
   un contacto nuevo — comportamiento correcto: la persona está
   ejerciendo un consentimiento nuevo, no "reactivando" el anterior.
+
+## 10. Arquitectura del administrador integrado
+
+`/admin` deja de ser una pantalla dedicada a Puni y se convierte en un
+tablero con navegación estable y resúmenes accionables:
+
+- `/admin`: inicio con conteos de contactos nuevos, tareas vencidas,
+  pedidos recientes y solicitudes Puni pendientes.
+- `/admin/crm`: listado filtrable de contactos.
+- `/admin/crm/[id]`: detalle, notas, tareas, interacciones, pedidos y
+  consentimiento.
+- `/admin/pedidos`: operación y cambio de estado de pedidos.
+- `/admin/puni`: solicitudes y resoluciones de adhesión que hoy viven en
+  `/admin`.
+
+Todos los módulos comparten el mismo layout, autenticación y navegación.
+Mover Puni a `/admin/puni` no cambia su modelo de permisos ni permite que
+el administrador cargue el costo de envío: ese dato sigue perteneciendo a
+la cocina aprobada.
+
+## 11. Entorno de staging y promoción
+
+Las migraciones de Carrito/Pedidos y CRM se aplican primero a
+`viandapp-staging`, un proyecto Supabase independiente. El staging usa
+usuarios y datos sintéticos; nunca recibe un volcado de PII de producción.
+Que el proyecto gratuito se pause por inactividad solo interrumpe pruebas:
+no afecta `viandapp.ar` ni la base productiva y se lo reactiva antes de una
+sesión de integración.
+
+Una migración avanza a producción únicamente cuando:
+
+1. pasaron unitarios e integración contra staging;
+2. se verificaron RLS, privilegios y atomicidad;
+3. existe un backup/preflight de producción;
+4. el usuario autorizó explícitamente aplicar esa migración.
+
+La publicación web tiene un gate separado: se muestra una vista previa y
+se solicita autorización antes de hacer `git push` a `main`.
