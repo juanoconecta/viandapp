@@ -10,7 +10,7 @@ import { detectarCambios } from "@/lib/pedidos/revalidacion";
 import { calcularTotal, validarUnaSolaCocina } from "@/lib/pedidos/total";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { telefonoParaWhatsapp } from "@/lib/viandera/telefono";
-import type { ModalidadPedido, PedidoCambio, PedidoResultado } from "@/types";
+import type { ModalidadPedido, Pedido, PedidoCambio, PedidoResultado } from "@/types";
 
 export type ItemGenerarPedido = {
   viandaId: string;
@@ -72,7 +72,7 @@ function validarDatos(valor: unknown): valor is DatosGenerarPedido {
       !esNumeroNoNegativo(item.precioVisto) ||
       !Number.isInteger(item.cantidad) ||
       item.cantidad < 1 ||
-      item.cantidad > 99 ||
+      item.cantidad > 50 ||
       ids.has(item.viandaId)
     ) {
       return false;
@@ -107,6 +107,78 @@ function contieneMismatch(error: { message?: string; details?: string }): boolea
   return `${error.message ?? ""} ${error.details ?? ""}`.includes(
     "idempotency_key_content_mismatch",
   );
+}
+
+function esObjeto(valor: unknown): valor is Record<string, unknown> {
+  return typeof valor === "object" && valor !== null && !Array.isArray(valor);
+}
+
+function esTextoONulo(valor: unknown): valor is string | null {
+  return valor === null || typeof valor === "string";
+}
+
+function esModalidad(valor: unknown): valor is ModalidadPedido {
+  return typeof valor === "string" && MODALIDADES.includes(valor as ModalidadPedido);
+}
+
+function esCambioPedido(valor: unknown): valor is PedidoCambio {
+  if (!esObjeto(valor) || typeof valor.tipo !== "string") return false;
+  switch (valor.tipo) {
+    case "plato_no_disponible":
+      return esUuidCanonico(valor.vianda_id);
+    case "precio_cambio":
+      return (
+        esUuidCanonico(valor.vianda_id) &&
+        esNumeroNoNegativo(valor.precio_esperado) &&
+        esNumeroNoNegativo(valor.precio_actual)
+      );
+    case "modalidad_no_disponible":
+      return valor.modalidad === null || typeof valor.modalidad === "string";
+    case "costo_envio_cambio":
+      return (
+        esModalidad(valor.modalidad) &&
+        esNumeroNoNegativo(valor.costo_esperado) &&
+        esNumeroNoNegativo(valor.costo_actual)
+      );
+    default:
+      return false;
+  }
+}
+
+function esPedido(valor: unknown): valor is Pedido {
+  if (!esObjeto(valor)) return false;
+  return (
+    esUuidCanonico(valor.id) &&
+    esUuidCanonico(valor.idempotency_key) &&
+    typeof valor.request_hash === "string" &&
+    valor.request_hash.length > 0 &&
+    esUuidCanonico(valor.vianderas_id) &&
+    esModalidad(valor.modalidad) &&
+    esNumeroNoNegativo(valor.costo_envio_capturado) &&
+    esNumeroNoNegativo(valor.total) &&
+    (valor.estado === "generado" ||
+      valor.estado === "confirmado" ||
+      valor.estado === "rechazado" ||
+      valor.estado === "cancelado") &&
+    esTextoONulo(valor.nombre_comprador) &&
+    esTextoONulo(valor.telefono_comprador) &&
+    esTextoONulo(valor.direccion_envio) &&
+    typeof valor.acepta_marketing === "boolean" &&
+    esTextoONulo(valor.consentimiento_marketing_en) &&
+    typeof valor.purgar_datos_en === "string" &&
+    typeof valor.datos_purgados === "boolean" &&
+    typeof valor.created_at === "string" &&
+    typeof valor.updated_at === "string"
+  );
+}
+
+function esPedidoResultado(valor: unknown): valor is PedidoResultado {
+  if (!esObjeto(valor) || typeof valor.ok !== "boolean" || !Array.isArray(valor.cambios)) {
+    return false;
+  }
+  if (!valor.cambios.every(esCambioPedido)) return false;
+  if (valor.ok) return valor.cambios.length === 0 && esPedido(valor.pedido);
+  return valor.pedido === null;
 }
 
 export async function generarPedido(datos: DatosGenerarPedido): Promise<ResultadoGenerarPedido> {
@@ -256,8 +328,8 @@ export async function generarPedido(datos: DatosGenerarPedido): Promise<Resultad
       return errorGenerico();
     }
 
-    const resultado = resultadoAtomico as PedidoResultado | null;
-    if (!resultado) return errorGenerico();
+    if (!esPedidoResultado(resultadoAtomico)) return errorGenerico();
+    const resultado = resultadoAtomico;
     if (!resultado.ok) return { status: "revisar_carrito", cambios: resultado.cambios };
 
     const pedido = resultado.pedido;

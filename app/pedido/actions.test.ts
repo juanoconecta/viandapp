@@ -26,6 +26,26 @@ const VIANDERA_ID = "20000000-0000-4000-8000-000000000002";
 const VIANDA_ID = "30000000-0000-4000-8000-000000000003";
 const PEDIDO_ID = "40000000-0000-4000-8000-000000000004";
 
+const pedidoValido = {
+  id: PEDIDO_ID,
+  idempotency_key: PEDIDO_KEY,
+  request_hash: "0123456789abcdef0123456789abcdef",
+  vianderas_id: VIANDERA_ID,
+  modalidad: "envio_propio" as const,
+  costo_envio_capturado: 700,
+  total: 5700,
+  estado: "generado" as const,
+  nombre_comprador: "Ana",
+  telefono_comprador: "3492555555",
+  direccion_envio: "Belgrano 123",
+  acepta_marketing: false,
+  consentimiento_marketing_en: null,
+  purgar_datos_en: "2026-12-03T10:07:32.000Z",
+  datos_purgados: false,
+  created_at: "2026-09-04T10:07:32.000Z",
+  updated_at: "2026-09-04T10:07:32.000Z",
+};
+
 const entradaValida: DatosGenerarPedido = {
   idempotencyKey: PEDIDO_KEY,
   items: [
@@ -47,6 +67,7 @@ const entradaValida: DatosGenerarPedido = {
 
 type Escenario = {
   contadores?: Partial<Record<"ip" | "sesion" | "global", number>>;
+  datosContador?: Partial<Record<"ip" | "sesion" | "global", unknown>>;
   errorContador?: "ip" | "sesion" | "global";
   viandas?: Array<{ id: string; nombre: string; precio: number | null; disponible: boolean }>;
   errorViandas?: boolean;
@@ -72,7 +93,14 @@ type Escenario = {
   errorItems?: boolean;
 };
 
+type ConsultaRegistrada = {
+  tabla: string;
+  select?: string;
+  filtros: Array<{ operador: "eq" | "in"; columna: string; valor: unknown }>;
+};
+
 function crearAdminFalso(escenario: Escenario = {}) {
+  const consultas: ConsultaRegistrada[] = [];
   const rpc = vi.fn(async (nombre: string, args: Record<string, unknown>) => {
     if (nombre === "registrar_intento_limite") {
       const clave = String(args.p_clave);
@@ -81,9 +109,17 @@ function crearAdminFalso(escenario: Escenario = {}) {
         : clave.startsWith("sesion:")
           ? "sesion"
           : "global";
+      const tieneDatoForzado =
+        escenario.datosContador !== undefined &&
+        Object.prototype.hasOwnProperty.call(escenario.datosContador, tipo);
       return escenario.errorContador === tipo
         ? { data: null, error: { message: "counter failed" } }
-        : { data: escenario.contadores?.[tipo] ?? 1, error: null };
+        : {
+            data: tieneDatoForzado
+              ? escenario.datosContador?.[tipo]
+              : (escenario.contadores?.[tipo] ?? 1),
+            error: null,
+          };
     }
     if (nombre === "crear_pedido_atomico") {
       return {
@@ -91,15 +127,7 @@ function crearAdminFalso(escenario: Escenario = {}) {
           escenario.resultadoAtomico ??
           ({
             ok: true,
-            pedido: {
-              id: PEDIDO_ID,
-              modalidad: "envio_propio",
-              costo_envio_capturado: 700,
-              total: 5700,
-              nombre_comprador: "Ana",
-              telefono_comprador: "3492555555",
-              direccion_envio: "Belgrano 123",
-            },
+            pedido: pedidoValido,
             cambios: [],
           } as const),
         error: escenario.errorAtomico ?? null,
@@ -109,6 +137,8 @@ function crearAdminFalso(escenario: Escenario = {}) {
   });
 
   const from = vi.fn((tabla: string) => {
+    const consulta: ConsultaRegistrada = { tabla, filtros: [] };
+    consultas.push(consulta);
     if (tabla === "viandas") {
       const terminal = Promise.resolve({
         data:
@@ -117,9 +147,20 @@ function crearAdminFalso(escenario: Escenario = {}) {
         error: escenario.errorViandas ? { message: "viandas failed" } : null,
       });
       return {
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({ in: vi.fn(() => terminal) })),
-        })),
+        select: vi.fn((columnas: string) => {
+          consulta.select = columnas;
+          return {
+            eq: vi.fn((columna: string, valor: unknown) => {
+              consulta.filtros.push({ operador: "eq", columna, valor });
+              return {
+                in: vi.fn((columnaIn: string, valorIn: unknown) => {
+                  consulta.filtros.push({ operador: "in", columna: columnaIn, valor: valorIn });
+                  return terminal;
+                }),
+              };
+            }),
+          };
+        }),
       };
     }
     if (tabla === "vianderas") {
@@ -139,11 +180,28 @@ function crearAdminFalso(escenario: Escenario = {}) {
         error: escenario.errorViandera ? { message: "viandera failed" } : null,
       });
       return {
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            eq: vi.fn(() => ({ maybeSingle: vi.fn(() => terminal) })),
-          })),
-        })),
+        select: vi.fn((columnas: string) => {
+          consulta.select = columnas;
+          return {
+            eq: vi.fn((primeraColumna: string, primerValor: unknown) => {
+              consulta.filtros.push({
+                operador: "eq",
+                columna: primeraColumna,
+                valor: primerValor,
+              });
+              return {
+                eq: vi.fn((segundaColumna: string, segundoValor: unknown) => {
+                  consulta.filtros.push({
+                    operador: "eq",
+                    columna: segundaColumna,
+                    valor: segundoValor,
+                  });
+                  return { maybeSingle: vi.fn(() => terminal) };
+                }),
+              };
+            }),
+          };
+        }),
       };
     }
     if (tabla === "puni_adhesiones") {
@@ -152,9 +210,15 @@ function crearAdminFalso(escenario: Escenario = {}) {
         error: escenario.errorAdhesion ? { message: "adhesion failed" } : null,
       });
       return {
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({ maybeSingle: vi.fn(() => terminal) })),
-        })),
+        select: vi.fn((columnas: string) => {
+          consulta.select = columnas;
+          return {
+            eq: vi.fn((columna: string, valor: unknown) => {
+              consulta.filtros.push({ operador: "eq", columna, valor });
+              return { maybeSingle: vi.fn(() => terminal) };
+            }),
+          };
+        }),
       };
     }
     if (tabla === "pedido_items") {
@@ -165,13 +229,21 @@ function crearAdminFalso(escenario: Escenario = {}) {
         error: escenario.errorItems ? { message: "items failed" } : null,
       });
       return {
-        select: vi.fn(() => ({ eq: vi.fn(() => terminal) })),
+        select: vi.fn((columnas: string) => {
+          consulta.select = columnas;
+          return {
+            eq: vi.fn((columna: string, valor: unknown) => {
+              consulta.filtros.push({ operador: "eq", columna, valor });
+              return terminal;
+            }),
+          };
+        }),
       };
     }
     throw new Error(`Tabla inesperada: ${tabla}`);
   });
 
-  return { rpc, from };
+  return { rpc, from, consultas };
 }
 
 function llamadasRpc(admin: ReturnType<typeof crearAdminFalso>, nombre: string) {
@@ -254,6 +326,22 @@ describe("generarPedido", () => {
     },
   );
 
+  it.each([null, 0, 1.5, "2"])(
+    "falla cerrado si el contador devuelve un dato inválido: %s",
+    async (datoInvalido) => {
+      const admin = crearAdminFalso({ datosContador: { ip: datoInvalido } });
+      createAdminClientMock.mockReturnValue(admin);
+
+      await expect(generarPedido(entradaValida)).resolves.toEqual({
+        status: "error",
+        mensaje: "No pudimos generar tu pedido. Intentá nuevamente.",
+      });
+      expect(admin.rpc).toHaveBeenCalledTimes(1);
+      expect(asegurarSesionPedidoMock).not.toHaveBeenCalled();
+      expect(admin.from).not.toHaveBeenCalled();
+    },
+  );
+
   it("usa unknown si no hay IP y rechaza entrada malformada solo después de los tres límites", async () => {
     const admin = crearAdminFalso();
     createAdminClientMock.mockReturnValue(admin);
@@ -281,6 +369,44 @@ describe("generarPedido", () => {
           vianderaId: "70000000-0000-4000-8000-000000000007",
         },
       ],
+    });
+
+    expect(resultado.status).toBe("error");
+    expect(admin.rpc).toHaveBeenCalledTimes(3);
+    expect(admin.from).not.toHaveBeenCalled();
+  });
+
+  it("acepta cantidad 50 y la envía a la función atómica", async () => {
+    const admin = crearAdminFalso({
+      itemsCapturados: [
+        { nombre_capturado: "Tarta", precio_capturado: 2500, cantidad: 50 },
+      ],
+      resultadoAtomico: {
+        ok: true,
+        pedido: { ...pedidoValido, total: 125700 },
+        cambios: [],
+      },
+    });
+    createAdminClientMock.mockReturnValue(admin);
+
+    const resultado = await generarPedido({
+      ...entradaValida,
+      items: [{ ...entradaValida.items[0], cantidad: 50 }],
+    });
+
+    expect(resultado.status).toBe("ok");
+    expect(llamadasRpc(admin, "crear_pedido_atomico")[0][1]).toMatchObject({
+      p_items: [{ vianda_id: VIANDA_ID, cantidad: 50, precio_esperado: 2500 }],
+    });
+  });
+
+  it("rechaza cantidad 51 después de los límites y antes del catálogo", async () => {
+    const admin = crearAdminFalso();
+    createAdminClientMock.mockReturnValue(admin);
+
+    const resultado = await generarPedido({
+      ...entradaValida,
+      items: [{ ...entradaValida.items[0], cantidad: 51 }],
     });
 
     expect(resultado.status).toBe("error");
@@ -357,6 +483,39 @@ describe("generarPedido", () => {
     });
   });
 
+  it.each([
+    ["objeto vacío", {}],
+    ["array", []],
+    ["ok false incompleto", { ok: false }],
+    ["ok false sin pedido nulo", { ok: false, pedido: {}, cambios: [] }],
+    [
+      "cambio anidado inválido",
+      { ok: false, pedido: null, cambios: [{ tipo: "precio_cambio", vianda_id: VIANDA_ID }] },
+    ],
+    ["ok true incompleto", { ok: true, pedido: {}, cambios: [] }],
+    [
+      "pedido anidado inválido",
+      { ok: true, pedido: { ...pedidoValido, total: "5700" }, cambios: [] },
+    ],
+    [
+      "ok true con cambios",
+      {
+        ok: true,
+        pedido: pedidoValido,
+        cambios: [{ tipo: "plato_no_disponible", vianda_id: VIANDA_ID }],
+      },
+    ],
+  ])("falla cerrado ante resultado atómico malformado: %s", async (_caso, resultadoAtomico) => {
+    const admin = crearAdminFalso({ resultadoAtomico });
+    createAdminClientMock.mockReturnValue(admin);
+
+    await expect(generarPedido(entradaValida)).resolves.toEqual({
+      status: "error",
+      mensaje: "No pudimos generar tu pedido. Intentá nuevamente.",
+    });
+    expect(admin.consultas.some(({ tabla }) => tabla === "pedido_items")).toBe(false);
+  });
+
   it("pide recargar el carrito cuando la key fue reutilizada con otro contenido", async () => {
     const admin = crearAdminFalso({
       errorAtomico: {
@@ -382,13 +541,8 @@ describe("generarPedido", () => {
       resultadoAtomico: {
         ok: true,
         pedido: {
-          id: PEDIDO_ID,
-          modalidad: "envio_propio",
-          costo_envio_capturado: 700,
+          ...pedidoValido,
           total: 5900,
-          nombre_comprador: "Ana",
-          telefono_comprador: "3492555555",
-          direccion_envio: "Belgrano 123",
         },
         cambios: [],
       },
@@ -421,6 +575,35 @@ describe("generarPedido", () => {
     expect(mensaje).toContain("2 x Tarta actual");
     expect(mensaje).toContain("$ 5.900");
     expect(mensaje).not.toContain("$ 5.700");
+    expect(admin.consultas).toEqual([
+      {
+        tabla: "viandas",
+        select: "id, nombre, precio, disponible",
+        filtros: [
+          { operador: "eq", columna: "vianderas_id", valor: VIANDERA_ID },
+          { operador: "in", columna: "id", valor: [VIANDA_ID] },
+        ],
+      },
+      {
+        tabla: "vianderas",
+        select:
+          "id, nombre, telefono, activo, ofrece_retiro, ofrece_envio, costo_envio_propio",
+        filtros: [
+          { operador: "eq", columna: "id", valor: VIANDERA_ID },
+          { operador: "eq", columna: "activo", valor: true },
+        ],
+      },
+      {
+        tabla: "puni_adhesiones",
+        select: "estado, costo_envio_puni",
+        filtros: [{ operador: "eq", columna: "viandera_id", valor: VIANDERA_ID }],
+      },
+      {
+        tabla: "pedido_items",
+        select: "nombre_capturado, precio_capturado, cantidad",
+        filtros: [{ operador: "eq", columna: "pedido_id", valor: PEDIDO_ID }],
+      },
+    ]);
   });
 
   it.each([null, "---"])(
