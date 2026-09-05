@@ -67,51 +67,78 @@ export default function FilterChips({
   ].filter(Boolean).length;
 
   return (
-    <div className="flex flex-nowrap gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
-      {OPCIONES_TIPO.map((opcion) => {
-        const activo = filtros.tipo === opcion.valor;
-        return (
-          <Chip
-            key={opcion.valor}
-            activo={activo}
-            href={construirHref(filtros, {
-              tipo: activo ? "todos" : opcion.valor,
-            })}
-          >
-            {opcion.etiqueta}
-          </Chip>
-        );
-      })}
+    <div className="space-y-4">
+      <section aria-labelledby="filtros-comida">
+        <h2 id="filtros-comida" className="sr-only">
+          Filtros de comida
+        </h2>
+        <div className="flex flex-nowrap gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
+          {OPCIONES_TIPO.map((opcion) => {
+            const activo = filtros.tipo === opcion.valor;
+            return (
+              <Chip
+                key={opcion.valor}
+                activo={activo}
+                href={construirHref(filtros, {
+                  tipo: activo ? "todos" : opcion.valor,
+                })}
+              >
+                {opcion.etiqueta}
+              </Chip>
+            );
+          })}
 
-      {OPCIONES_MODALIDAD.map((opcion) => {
-        const activo = filtros.modalidad === opcion.valor;
-        return (
-          <Chip
-            key={opcion.valor}
-            activo={activo}
-            href={construirHref(filtros, {
-              modalidad: activo ? "todas" : opcion.valor,
-            })}
-          >
-            {opcion.etiqueta}
-          </Chip>
-        );
-      })}
+          {ETIQUETAS_DIETARIAS.map((opcion) => {
+            const activo = filtros.etiqueta === opcion.valor;
+            return (
+              <Chip
+                key={opcion.valor}
+                activo={activo}
+                href={construirHref(filtros, {
+                  etiqueta: activo ? null : opcion.valor,
+                })}
+              >
+                {opcion.etiqueta}
+              </Chip>
+            );
+          })}
+        </div>
+      </section>
 
-      {ETIQUETAS_DIETARIAS.map((opcion) => {
-        const activo = filtros.etiqueta === opcion.valor;
-        return (
+      <section
+        aria-labelledby="filtros-entrega"
+        className="flex flex-col gap-2 rounded-2xl border border-line/80 bg-card/55 p-3 sm:flex-row sm:items-center sm:gap-3"
+      >
+        <h2
+          id="filtros-entrega"
+          className="shrink-0 text-sm font-semibold text-ink"
+        >
+          ¿Cómo querés recibirlo?
+        </h2>
+        <div className="flex flex-nowrap gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
           <Chip
-            key={opcion.valor}
-            activo={activo}
-            href={construirHref(filtros, {
-              etiqueta: activo ? null : opcion.valor,
-            })}
+            activo={filtros.modalidad === "todas"}
+            href={construirHref(filtros, { modalidad: "todas" })}
           >
-            {opcion.etiqueta}
+            Cualquiera
           </Chip>
-        );
-      })}
+
+          {OPCIONES_MODALIDAD.map((opcion) => {
+            const activo = filtros.modalidad === opcion.valor;
+            return (
+              <Chip
+                key={opcion.valor}
+                activo={activo}
+                href={construirHref(filtros, {
+                  modalidad: activo ? "todas" : opcion.valor,
+                })}
+              >
+                {opcion.etiqueta}
+              </Chip>
+            );
+          })}
+        </div>
+      </section>
 
       {cantidadFiltrosActivos >= 2 && (
         <Link
@@ -120,7 +147,7 @@ export default function FilterChips({
             etiqueta: null,
             modalidad: "todas",
           })}
-          className="flex min-h-[44px] shrink-0 items-center px-2 text-sm font-medium text-coral-600 underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral-600"
+          className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-coral-600 underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral-600"
         >
           Limpiar todo
         </Link>
