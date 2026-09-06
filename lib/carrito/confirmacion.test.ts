@@ -90,4 +90,37 @@ describe("confirmación ante fallos externos", () => {
     expect(local.valor(CLAVE_CARRITO)).toBe(serializarCarrito(carrito));
     expect(sesion.valor(CLAVE_SESION_CHECKOUT)).toBeNull();
   });
+
+  it.each(["lectura", "borrado"])(
+    "navega una sola vez y conserva ok si falla el %s de localStorage después de crear",
+    async (fallo) => {
+      let navegaciones = 0;
+      let llamadasPedido = 0;
+      const local = {
+        getItem: () => {
+          if (fallo === "lectura") throw new Error("storage bloqueado");
+          return serializarCarrito(carrito);
+        },
+        removeItem: () => {
+          if (fallo === "borrado") throw new Error("storage bloqueado");
+        },
+      };
+      const resultado = await ejecutarConfirmacion(
+        { carrito, datos },
+        {
+          localStorage: local,
+          sessionStorage: memoria({}),
+          generarUuid: () => KEY,
+          generarPedido: async () => {
+            llamadasPedido += 1;
+            return { status: "ok", pedidoId: "44444444-4444-4444-8444-444444444444", whatsappHref: "https://wa.me/543492123456" };
+          },
+          navegar: () => { navegaciones += 1; },
+        },
+      );
+      expect(resultado.status).toBe("ok");
+      expect(llamadasPedido).toBe(1);
+      expect(navegaciones).toBe(1);
+    },
+  );
 });

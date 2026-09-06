@@ -4,16 +4,14 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import {
   agregarPlato,
   cantidadTotal,
-  CLAVE_CARRITO,
   decrementarPlato,
   incrementarPlato,
-  parsearCarrito,
   reemplazarCarrito,
-  serializarCarrito,
   vaciarCarrito,
   type CarritoAlmacenado,
   type ResultadoAgregar,
 } from "@/lib/carrito/estado";
+import { leerCarritoSeguro, persistirCarritoSeguro } from "@/lib/carrito/storage";
 
 type ContextoCarrito = {
   carrito: CarritoAlmacenado | null;
@@ -34,7 +32,7 @@ export function CarritoProvider({ children }: { children?: ReactNode }) {
 
   useEffect(() => {
     const tarea = window.setTimeout(() => {
-      setCarrito(parsearCarrito(window.localStorage.getItem(CLAVE_CARRITO)));
+      setCarrito(leerCarritoSeguro(window.localStorage));
       setHidratado(true);
     }, 0);
     return () => window.clearTimeout(tarea);
@@ -42,8 +40,7 @@ export function CarritoProvider({ children }: { children?: ReactNode }) {
 
   useEffect(() => {
     if (!hidratado) return;
-    if (carrito) window.localStorage.setItem(CLAVE_CARRITO, serializarCarrito(carrito));
-    else window.localStorage.removeItem(CLAVE_CARRITO);
+    persistirCarritoSeguro(window.localStorage, carrito);
   }, [carrito, hidratado]);
 
   const valor = useMemo<ContextoCarrito>(() => ({

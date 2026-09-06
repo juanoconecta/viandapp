@@ -47,13 +47,19 @@ export async function ejecutarConfirmacion(
   }
 
   if (respuesta.status === "ok") {
-    const guardado = parsearCarrito(
-      dependencias.localStorage.getItem(CLAVE_CARRITO),
-    );
-    if (mismoContenidoCarrito(guardado, entrada.carrito)) {
-      dependencias.localStorage.removeItem(CLAVE_CARRITO);
+    try {
+      const guardado = parsearCarrito(
+        dependencias.localStorage.getItem(CLAVE_CARRITO),
+      );
+      if (mismoContenidoCarrito(guardado, entrada.carrito)) {
+        dependencias.localStorage.removeItem(CLAVE_CARRITO);
+      }
+    } catch {
+      // El pedido ya existe: limpiar el cache local es best-effort y no
+      // puede impedir que la persona continúe al WhatsApp retornado.
+    } finally {
+      dependencias.navegar(respuesta.whatsappHref);
     }
-    dependencias.navegar(respuesta.whatsappHref);
   } else if (respuesta.status === "revisar_carrito") {
     invalidarClaveCheckout(dependencias.sessionStorage);
   }

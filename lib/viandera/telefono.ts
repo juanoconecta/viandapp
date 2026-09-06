@@ -12,11 +12,9 @@ const MINIMO_DIGITOS_TELEFONO = 8;
  * mejora posterior en el formulario de perfil de la viandera — acá es
  * solo la última red de seguridad antes de armar el enlace.
  *
- * Vive en un módulo aparte (no dentro de `WhatsAppIntent.tsx`) porque ese
- * componente es `"use client"` — una función exportada de un módulo
- * cliente no se puede invocar directo desde un Server Component como
- * `app/[slug]/page.tsx`, que también necesita este resultado para decidir
- * si renderiza `StickyContactBar`.
+ * Vive en un módulo puro y compartido porque la generación server-side del
+ * pedido y del enlace de WhatsApp necesita aplicar exactamente la misma
+ * normalización que cualquier interfaz que muestre o valide el teléfono.
  */
 export function telefonoParaWhatsapp(telefono: string | null): string | null {
   if (!telefono) return null;

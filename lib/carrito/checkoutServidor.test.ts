@@ -53,4 +53,27 @@ describe("datos frescos del checkout", () => {
     );
     expect(resultado).toMatchObject({ estado: "listo", modalidades: [{ id: "retiro", costo: 0 }] });
   });
+
+  it.each([NaN, Infinity, -1, "0"])(
+    "excluye envío propio con costo runtime inválido %s",
+    (costoInvalido) => {
+      const resultado = prepararCheckout(
+        { vianderaId: COCINA, items: [{ platoId: PLATO_A, cantidad: 1 }] },
+        { ...viandera, ofrece_retiro: false, costo_envio_propio: costoInvalido as unknown as number },
+        [{ id: PLATO_A, vianderas_id: COCINA, nombre: "Tarta", precio: 4200, disponible: true }],
+        null,
+      );
+      expect(resultado).toMatchObject({ estado: "listo", modalidades: [] });
+    },
+  );
+
+  it("excluye Puni cuando su costo runtime no es finito", () => {
+    const resultado = prepararCheckout(
+      { vianderaId: COCINA, items: [{ platoId: PLATO_A, cantidad: 1 }] },
+      { ...viandera, ofrece_retiro: false, ofrece_envio: false },
+      [{ id: PLATO_A, vianderas_id: COCINA, nombre: "Tarta", precio: 4200, disponible: true }],
+      { estado: "aprobada", costo_envio_puni: NaN },
+    );
+    expect(resultado).toMatchObject({ estado: "listo", modalidades: [] });
+  });
 });

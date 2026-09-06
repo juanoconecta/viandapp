@@ -81,7 +81,9 @@ export function prepararCheckout(
   });
   const modalidades = modalidadesDisponibles(viandera, adhesion).flatMap((id) => {
     const costo = costoEnvioVigente(id, viandera, adhesion);
-    return costo === null ? [] : [{ id, etiqueta: ETIQUETAS[id], costo }];
+    return typeof costo === "number" && Number.isFinite(costo) && costo >= 0
+      ? [{ id, etiqueta: ETIQUETAS[id], costo }]
+      : [];
   });
 
   return {
