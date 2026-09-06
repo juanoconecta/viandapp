@@ -10,10 +10,11 @@ import {
   type EstadoAdhesionVendedora,
 } from "@/lib/envios/adhesionPropia";
 import { transicionValida } from "@/lib/envios/transiciones";
+import { transicionValidaPedido } from "@/lib/pedidos/transiciones";
 import { pathDesdeFotoUrl } from "@/lib/viandera/storage";
 import { generarSlugDisponible, normalizarSlug, esSlugReservado } from "@/lib/viandera/slug";
 import { ETIQUETAS_DIETARIAS } from "@/lib/viandera/etiquetas";
-import type { Database, TipoVianda } from "@/types";
+import type { Database, EstadoPedido, TipoVianda } from "@/types";
 
 async function obtenerVianderaId(
   supabase: SupabaseClient<Database>,
@@ -276,6 +277,33 @@ export async function borrarPlato(formData: FormData): Promise<void> {
   }
 
   revalidatePath("/viandera");
+}
+
+export async function actualizarEstadoPedido(formData: FormData): Promise<void> {
+  const pedidoId = String(formData.get("pedidoId") ?? "");
+  const estadoActual = String(formData.get("estadoActual") ?? "") as EstadoPedido;
+  const nuevoEstado = String(formData.get("nuevoEstado") ?? "") as EstadoPedido;
+
+  if (!transicionValidaPedido(estadoActual, nuevoEstado)) {
+    console.error("actualizarEstadoPedido: transicion invalida", estadoActual, nuevoEstado);
+    return;
+  }
+
+  const supabase = await createClient();
+  const vianderaId = await obtenerVianderaId(supabase);
+  if (!vianderaId) redirect("/app");
+
+  const { error } = await supabase
+    .from("pedidos")
+    .update({ estado: nuevoEstado })
+    .eq("id", pedidoId)
+    .eq("vianderas_id", vianderaId);
+
+  if (error) {
+    console.error("actualizarEstadoPedido falló:", error.message);
+  }
+
+  revalidatePath("/viandera/pedidos");
 }
 
 export type EstadoPlato =
