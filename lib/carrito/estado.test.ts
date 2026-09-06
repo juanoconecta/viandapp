@@ -95,7 +95,7 @@ describe("operaciones inmutables", () => {
         cantidad: 1,
       })),
     };
-    expect(() => agregarPlato(lleno, COCINA, PLATO_A)).toThrow("50");
+    expect(agregarPlato(lleno, COCINA, PLATO_A)).toEqual({ tipo: "limite_alcanzado" });
     expect(() => incrementarPlato({ vianderaId: COCINA, items: [{ platoId: PLATO_A, cantidad: 50 }] }, PLATO_A)).toThrow("50");
   });
 

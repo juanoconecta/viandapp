@@ -9,7 +9,8 @@ export type CarritoAlmacenado = { vianderaId: string; items: ItemCarrito[] };
 
 export type ResultadoAgregar =
   | { tipo: "actualizado"; carrito: CarritoAlmacenado }
-  | { tipo: "requiere_reemplazo"; vianderaId: string; platoId: string };
+  | { tipo: "requiere_reemplazo"; vianderaId: string; platoId: string }
+  | { tipo: "limite_alcanzado" };
 
 export function esUuidCanonico(valor: unknown): valor is string {
   return typeof valor === "string" && UUID_CANONICO.test(valor);
@@ -71,7 +72,7 @@ export function agregarPlato(
 
   const existente = carrito.items.find((item) => item.platoId === platoId);
   if (existente) return { tipo: "actualizado", carrito: incrementarPlato(carrito, platoId) };
-  if (carrito.items.length >= MAX_ITEMS_CARRITO) throw new Error("El carrito admite hasta 50 platos distintos.");
+  if (carrito.items.length >= MAX_ITEMS_CARRITO) return { tipo: "limite_alcanzado" };
 
   return {
     tipo: "actualizado",

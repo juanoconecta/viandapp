@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { MAX_ITEMS_CARRITO } from "@/lib/carrito/estado";
 import { useCarrito } from "./CarritoProvider";
 import ControlCantidad from "./ControlCantidad";
 
@@ -20,6 +21,9 @@ export default function BotonAgregarAlCarrito({
   const cantidad = carrito?.vianderaId === vianderaId
     ? carrito.items.find((item) => item.platoId === platoId)?.cantidad
     : undefined;
+  const limiteAlcanzado = carrito?.vianderaId === vianderaId
+    && cantidad === undefined
+    && carrito.items.length >= MAX_ITEMS_CARRITO;
 
   function intentarAgregar() {
     const resultado = agregar(vianderaId, platoId);
@@ -53,8 +57,9 @@ export default function BotonAgregarAlCarrito({
         <button
           type="button"
           onClick={intentarAgregar}
-          aria-label={`Agregar ${nombre} al pedido`}
-          className={`${botonClase} border-coral-600 bg-coral-600 text-white hover:bg-coral-700`}
+          disabled={limiteAlcanzado}
+          aria-label={limiteAlcanzado ? `Agregar ${nombre} al pedido (máximo de platos distintos alcanzado)` : `Agregar ${nombre} al pedido`}
+          className={`${botonClase} border-coral-600 bg-coral-600 text-white hover:bg-coral-700 disabled:cursor-not-allowed disabled:opacity-50`}
         >
           Agregar
         </button>
