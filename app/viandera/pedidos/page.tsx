@@ -18,32 +18,47 @@ export default async function VianderaPedidosPage() {
 
   if (!viandera) redirect("/app");
 
-  // El `Database` de este proyecto está escrito a mano con `Relationships: []`
-  // en cada tabla (ver lib/viandas/consultas.ts), así que un embed
-  // `pedido_items(*)` no tiene metadata de relación para tipar el resultado
-  // automáticamente — se castea explícitamente a la forma real que devuelve
-  // esta consulta.
+  // Dos consultas separadas en vez de un select con embed
+  // (`pedido_items(*)`) — el `Database` de este proyecto está escrito a
+  // mano con `Relationships: []` en cada tabla, así que un embed no tiene
+  // metadata de relación para tipar bien el resultado. Mismo patrón que
+  // `lib/viandas/consultas.ts` y `app/[slug]/page.tsx`.
   const { data: pedidosCrudos } = await supabase
     .from("pedidos")
-    .select("*, pedido_items(*)")
+    .select("*")
     .eq("vianderas_id", viandera.id)
     .order("created_at", { ascending: false });
 
-  const pedidos = pedidosCrudos as unknown as
-    | (Pedido & { pedido_items: PedidoItem[] })[]
-    | null;
+  const pedidos: (Pedido & { pedido_items: PedidoItem[] })[] = [];
+  if (pedidosCrudos && pedidosCrudos.length > 0) {
+    const { data: items } = await supabase
+      .from("pedido_items")
+      .select("*")
+      .in("pedido_id", pedidosCrudos.map((pedido) => pedido.id));
+
+    const itemsPorPedido = new Map<string, PedidoItem[]>();
+    for (const item of items ?? []) {
+      const lista = itemsPorPedido.get(item.pedido_id) ?? [];
+      lista.push(item);
+      itemsPorPedido.set(item.pedido_id, lista);
+    }
+
+    for (const pedido of pedidosCrudos) {
+      pedidos.push({ ...pedido, pedido_items: itemsPorPedido.get(pedido.id) ?? [] });
+    }
+  }
 
   return (
     <div>
       <h1 className="font-display text-2xl font-bold text-ink">Pedidos</h1>
 
-      {(pedidos ?? []).length === 0 ? (
+      {pedidos.length === 0 ? (
         <p className="mt-6 text-sm text-ink/60">
           Todavía no recibiste ningún pedido.
         </p>
       ) : (
         <div className="mt-6 flex flex-col gap-4">
-          {(pedidos ?? []).map((pedido) => (
+          {pedidos.map((pedido) => (
             <TarjetaPedido key={pedido.id} pedido={pedido} />
           ))}
         </div>
