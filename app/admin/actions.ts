@@ -9,6 +9,7 @@ import {
   transicionValida,
   type EstadoAdhesionPuni,
 } from "@/lib/envios/transiciones";
+import { ejecutarPurgado } from "@/lib/pedidos/servicioPurgado";
 
 export type EstadoInvitacion =
   | { status: "idle" }
@@ -139,4 +140,31 @@ export async function resolverAdhesionPuni(
 
   revalidatePath("/admin");
   return { status: "ok" };
+}
+
+export type ResultadoPurgarPedidos =
+  | { status: "idle" }
+  | { status: "error"; mensaje: string }
+  | { status: "ok"; mensaje: string };
+
+export async function purgarPedidosVencidos(
+  _prevState: ResultadoPurgarPedidos,
+  _formData: FormData,
+): Promise<ResultadoPurgarPedidos> {
+  void _prevState;
+  void _formData;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!esAdmin(user?.email)) return { status: "error", mensaje: "No autorizado." };
+
+  const resultado = await ejecutarPurgado();
+  if (!resultado.ok) return { status: "error", mensaje: resultado.error };
+
+  revalidatePath("/admin");
+  return {
+    status: "ok",
+    mensaje: `Se purgaron ${resultado.pedidosPurgados} pedidos y se limpiaron ${resultado.contadoresLimpiados} contadores del limitador.`,
+  };
 }

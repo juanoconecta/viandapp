@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { esAdmin } from "@/lib/auth/admin";
 import FormularioInvitar from "@/components/admin/FormularioInvitar";
 import TarjetaSolicitudPuni from "@/components/admin/TarjetaSolicitudPuni";
+import BotonPurgarPedidos from "@/components/admin/BotonPurgarPedidos";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -86,6 +87,16 @@ export default async function AdminPage() {
             </li>
           ))}
         </ul>
+      </div>
+
+      <div className="mt-10">
+        <h2 className="font-display text-lg font-semibold text-ink">Mantenimiento</h2>
+        <p className="mt-1 text-sm text-ink/60">
+          El cron diario ya purga pedidos vencidos automáticamente — usá esto solo si necesitás forzarlo.
+        </p>
+        <div className="mt-4">
+          <BotonPurgarPedidos />
+        </div>
       </div>
     </div>
   );

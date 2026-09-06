@@ -92,13 +92,15 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 ADMIN_EMAIL=
 RATE_LIMIT_SECRET=
+CRON_SECRET=
 ```
 
-Las tres últimas son server-only — nunca `NEXT_PUBLIC_`, nunca importadas
+Las cuatro últimas son server-only — nunca `NEXT_PUBLIC_`, nunca importadas
 desde un archivo `'use client'`. Se usan para el panel de admin (`/admin`)
 y el panel de viandera (`/viandera`): invitar cuentas, vincular la cuenta
 de una viandera a su fila en `vianderas`, y verificar quién es el admin sin
-una tabla de roles.
+una tabla de roles. `CRON_SECRET` autentica el cron diario de purgado
+(`/api/cron/purgar-pedidos`).
 
 ### Prerrequisitos de Auth (Supabase Dashboard)
 
