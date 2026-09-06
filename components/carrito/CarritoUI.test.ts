@@ -6,6 +6,7 @@ import { CarritoProvider } from "./CarritoProvider";
 import { CajonCarritoVista } from "./CajonCarrito";
 import ConfirmarPedido from "./ConfirmarPedido";
 import RevisarCambios from "./RevisarCambios";
+import ControlCantidad from "./ControlCantidad";
 
 const COCINA = "11111111-1111-4111-8111-111111111111";
 const PLATO = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -24,9 +25,22 @@ describe("UI inicial del carrito", () => {
     expect(html).toContain("Tarta de calabaza");
     expect(html).toContain("Con masa casera");
     expect(html).toContain("$4.200");
-    expect(html).toContain("Agregar Tarta de calabaza al pedido");
+    expect(html).toContain("Cargando pedido de Tarta de calabaza");
+    expect(html).toMatch(/<button[^>]*disabled/);
+    expect(html).not.toContain("Agregar Tarta de calabaza al pedido");
     expect(html).toContain("min-h-[44px]");
     expect(html).not.toContain("href=");
+  });
+
+  it("deshabilita el incremento al llegar a 50 en el control compartido", () => {
+    const html = renderToStaticMarkup(createElement(ControlCantidad, {
+      nombre: "Tarta",
+      cantidad: 50,
+      onIncrementar: () => undefined,
+      onDecrementar: () => undefined,
+    }));
+    expect(html).toMatch(/aria-label="Agregar una Tarta \(máximo alcanzado\)"[^>]*disabled/);
+    expect(html).toContain("disabled:opacity-50");
   });
 
   it("presenta una libreta con conteo, edición, subtotal actual y continuidad", () => {

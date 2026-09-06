@@ -3,8 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { generarPedido, type ResultadoGenerarPedido } from "@/app/pedido/actions";
 import { calcularTotal } from "@/lib/pedidos/total";
-import { CLAVE_CARRITO, mismoContenidoCarrito, parsearCarrito } from "@/lib/carrito/estado";
-import { invalidarClaveCheckout, obtenerClaveCheckout } from "@/lib/carrito/sesionCheckout";
+import { ejecutarConfirmacion } from "@/lib/carrito/confirmacion";
 import type { ItemCheckout, ModalidadCheckout } from "@/lib/carrito/checkoutServidor";
 import type { ModalidadPedido } from "@/types";
 import RevisarCambios from "./RevisarCambios";
@@ -33,33 +32,38 @@ export default function ConfirmarPedido({ viandera, items, modalidades }: Props)
     setPendiente(true);
     setResultado(null);
     const formulario = new FormData(evento.currentTarget);
-    const idempotencyKey = obtenerClaveCheckout(carrito, window.sessionStorage, () => crypto.randomUUID());
-    const respuesta = await generarPedido({
-      idempotencyKey,
-      items: items.map((item) => ({
-        viandaId: item.platoId,
-        vianderaId: item.vianderaId,
-        nombreVisto: item.nombre,
-        precioVisto: item.precio,
-        cantidad: item.cantidad,
-      })),
-      modalidad,
-      costoEnvioEsperado: opcion.costo,
-      nombreComprador: String(formulario.get("nombre") ?? ""),
-      telefonoComprador: String(formulario.get("telefono") ?? ""),
-      direccionEnvio: modalidad === "retiro" ? null : String(formulario.get("direccion") ?? ""),
-      aceptaMarketing: formulario.get("aceptaMarketing") === "on",
-    });
-
-    if (respuesta.status === "ok") {
-      const guardado = parsearCarrito(window.localStorage.getItem(CLAVE_CARRITO));
-      if (mismoContenidoCarrito(guardado, carrito)) window.localStorage.removeItem(CLAVE_CARRITO);
-      window.location.assign(respuesta.whatsappHref);
-      return;
+    try {
+      const respuesta = await ejecutarConfirmacion(
+        {
+          carrito,
+          datos: {
+            items: items.map((item) => ({
+              viandaId: item.platoId,
+              vianderaId: item.vianderaId,
+              nombreVisto: item.nombre,
+              precioVisto: item.precio,
+              cantidad: item.cantidad,
+            })),
+            modalidad,
+            costoEnvioEsperado: opcion.costo,
+            nombreComprador: String(formulario.get("nombre") ?? ""),
+            telefonoComprador: String(formulario.get("telefono") ?? ""),
+            direccionEnvio: modalidad === "retiro" ? null : String(formulario.get("direccion") ?? ""),
+            aceptaMarketing: formulario.get("aceptaMarketing") === "on",
+          },
+        },
+        {
+          localStorage: window.localStorage,
+          sessionStorage: window.sessionStorage,
+          generarUuid: () => crypto.randomUUID(),
+          generarPedido,
+          navegar: (href) => window.location.assign(href),
+        },
+      );
+      setResultado(respuesta.status === "ok" ? null : respuesta);
+    } finally {
+      setPendiente(false);
     }
-    if (respuesta.status === "revisar_carrito") invalidarClaveCheckout(window.sessionStorage);
-    setResultado(respuesta);
-    setPendiente(false);
   }
 
   const nombresPorId = Object.fromEntries(items.map((item) => [item.platoId, item.nombre]));

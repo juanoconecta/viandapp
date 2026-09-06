@@ -5,6 +5,7 @@ import { construirUrlCheckout } from "@/lib/carrito/checkout";
 import type { CarritoAlmacenado } from "@/lib/carrito/estado";
 import StickyContactBar from "@/components/storefront/StickyContactBar";
 import { useCarrito } from "./CarritoProvider";
+import ControlCantidad from "./ControlCantidad";
 
 export type PlatoVisibleCarrito = { id: string; nombre: string; precio: number | null };
 
@@ -65,11 +66,12 @@ export function CajonCarritoVista({
             {filas.map((fila) => (
               <li key={fila.id} className="flex items-center justify-between gap-3 py-3">
                 <div><p className="font-medium">{fila.nombre}</p><p className="text-xs text-ink-muted">{fila.precio === null ? "Precio a revisar" : `Subtotal actual estimado: $${(fila.precio * fila.cantidad).toLocaleString("es-AR")}`}</p></div>
-                <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => onDecrementar(fila.id)} aria-label={`Quitar una ${fila.nombre}`} className={`min-h-[44px] min-w-[44px] rounded-full border border-teal text-teal ${foco}`}>−</button>
-                  <output className="min-w-6 text-center font-display font-bold">{fila.cantidad}</output>
-                  <button type="button" onClick={() => onIncrementar(fila.id)} aria-label={`Agregar una ${fila.nombre}`} className={`min-h-[44px] min-w-[44px] rounded-full border border-teal text-teal ${foco}`}>+</button>
-                </div>
+                <ControlCantidad
+                  nombre={fila.nombre}
+                  cantidad={fila.cantidad}
+                  onDecrementar={() => onDecrementar(fila.id)}
+                  onIncrementar={() => onIncrementar(fila.id)}
+                />
               </li>
             ))}
           </ul>

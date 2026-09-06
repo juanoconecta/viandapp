@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { useCarrito } from "./CarritoProvider";
+import ControlCantidad from "./ControlCantidad";
 
 const botonClase = "inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-line px-3 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral-600";
 
@@ -25,14 +26,29 @@ export default function BotonAgregarAlCarrito({
     if (resultado.tipo === "requiere_reemplazo") dialogRef.current?.showModal();
   }
 
+  if (!hidratado) {
+    return (
+      <button
+        type="button"
+        disabled
+        aria-busy="true"
+        aria-label={`Cargando pedido de ${nombre}`}
+        className={`${botonClase} cursor-wait border-line bg-paper text-ink-muted opacity-70`}
+      >
+        Cargando…
+      </button>
+    );
+  }
+
   return (
     <>
-      {hidratado && cantidad ? (
-        <div className="flex items-center gap-1" aria-label={`Cantidad de ${nombre}`}>
-          <button type="button" onClick={() => decrementar(platoId)} aria-label={`Quitar una ${nombre}`} className={`${botonClase} border-teal text-teal`}>−</button>
-          <output aria-live="polite" className="min-w-7 text-center font-display font-bold text-ink">{cantidad}</output>
-          <button type="button" onClick={() => incrementar(platoId)} aria-label={`Agregar una ${nombre}`} className={`${botonClase} border-teal text-teal`}>+</button>
-        </div>
+      {cantidad ? (
+        <ControlCantidad
+          nombre={nombre}
+          cantidad={cantidad}
+          onDecrementar={() => decrementar(platoId)}
+          onIncrementar={() => incrementar(platoId)}
+        />
       ) : (
         <button
           type="button"
