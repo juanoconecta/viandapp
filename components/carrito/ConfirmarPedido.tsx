@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { generarPedido, type ResultadoGenerarPedido } from "@/app/pedido/actions";
 import { calcularTotal } from "@/lib/pedidos/total";
 import { ejecutarConfirmacion } from "@/lib/carrito/confirmacion";
+import { crearStorageMemoria, resolverStorageSeguro } from "@/lib/carrito/storage";
 import type { ItemCheckout, ModalidadCheckout } from "@/lib/carrito/checkoutServidor";
 import type { ModalidadPedido } from "@/types";
 import RevisarCambios from "./RevisarCambios";
@@ -18,6 +19,8 @@ export default function ConfirmarPedido({ viandera, items, modalidades }: Props)
   const [modalidad, setModalidad] = useState<ModalidadPedido>(modalidades[0]?.id ?? "retiro");
   const [pendiente, setPendiente] = useState(false);
   const [resultado, setResultado] = useState<ResultadoGenerarPedido | null>(null);
+  const respaldoLocal = useRef(crearStorageMemoria());
+  const respaldoSesion = useRef(crearStorageMemoria());
   const opcion = modalidades.find((actual) => actual.id === modalidad);
   const total = calcularTotal(items.map((item) => ({ precioCapturado: item.precio, cantidad: item.cantidad })), opcion?.costo ?? 0);
   const carrito = { vianderaId: viandera.id, items: items.map((item) => ({ platoId: item.platoId, cantidad: item.cantidad })) };
@@ -53,8 +56,14 @@ export default function ConfirmarPedido({ viandera, items, modalidades }: Props)
           },
         },
         {
-          localStorage: window.localStorage,
-          sessionStorage: window.sessionStorage,
+          localStorage: resolverStorageSeguro(
+            () => window.localStorage,
+            respaldoLocal.current,
+          ),
+          sessionStorage: resolverStorageSeguro(
+            () => window.sessionStorage,
+            respaldoSesion.current,
+          ),
           generarUuid: () => crypto.randomUUID(),
           generarPedido,
           navegar: (href) => window.location.assign(href),

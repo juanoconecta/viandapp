@@ -61,7 +61,12 @@ export async function ejecutarConfirmacion(
       dependencias.navegar(respuesta.whatsappHref);
     }
   } else if (respuesta.status === "revisar_carrito") {
-    invalidarClaveCheckout(dependencias.sessionStorage);
+    try {
+      invalidarClaveCheckout(dependencias.sessionStorage);
+    } catch {
+      // Los cambios del servidor son autoritativos aunque el navegador no
+      // permita invalidar la optimización local de idempotencia.
+    }
   }
 
   return respuesta;

@@ -91,6 +91,27 @@ describe("confirmación ante fallos externos", () => {
     expect(sesion.valor(CLAVE_SESION_CHECKOUT)).toBeNull();
   });
 
+  it("conserva los cambios autoritativos si falla la invalidación de la key", async () => {
+    const cambios = [{ tipo: "plato_no_disponible" as const, vianda_id: PLATO }];
+    let navegaciones = 0;
+    const resultado = await ejecutarConfirmacion(
+      { carrito, datos },
+      {
+        localStorage: memoria({}),
+        sessionStorage: {
+          getItem: () => JSON.stringify({ fingerprint: fingerprintCheckout(carrito), idempotencyKey: KEY }),
+          setItem: () => undefined,
+          removeItem: () => { throw new DOMException("denegado", "SecurityError"); },
+        },
+        generarUuid: () => KEY,
+        generarPedido: async () => ({ status: "revisar_carrito", cambios }),
+        navegar: () => { navegaciones += 1; },
+      },
+    );
+    expect(resultado).toEqual({ status: "revisar_carrito", cambios });
+    expect(navegaciones).toBe(0);
+  });
+
   it.each(["lectura", "borrado"])(
     "navega una sola vez y conserva ok si falla el %s de localStorage después de crear",
     async (fallo) => {

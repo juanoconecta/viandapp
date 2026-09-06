@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { leerCarritoSeguro, persistirCarritoSeguro } from "./storage";
+import {
+  crearStorageMemoria,
+  leerCarritoSeguro,
+  persistirCarritoSeguro,
+  resolverStorageSeguro,
+} from "./storage";
 import { CLAVE_CARRITO } from "./estado";
 
 const carrito = {
@@ -30,5 +35,16 @@ describe("adaptador acotado de localStorage", () => {
       removeItem: (clave) => { claves.push(clave); },
     }, carrito);
     expect(claves).toEqual([CLAVE_CARRITO]);
+  });
+
+  it("usa un respaldo en memoria si falla el getter de la propiedad Storage", () => {
+    const respaldo = crearStorageMemoria();
+    respaldo.setItem("clave", "valor");
+    const resuelto = resolverStorageSeguro(() => {
+      throw new DOMException("Acceso denegado", "SecurityError");
+    }, respaldo);
+
+    expect(resuelto).toBe(respaldo);
+    expect(resuelto.getItem("clave")).toBe("valor");
   });
 });
