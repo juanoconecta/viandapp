@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
-import { iniciarSesion, iniciarSesionConGoogle, type EstadoAuth } from "@/app/auth/actions";
+import { iniciarSesion, type EstadoAuth } from "@/app/auth/actions";
 import { campoClase } from "@/components/ui/campoClase";
 import BotonEnviar from "@/components/ui/BotonEnviar";
 
@@ -51,22 +51,6 @@ export default function FormularioLogin({ redirectTo }: { redirectTo: string }) 
         )}
 
         <BotonEnviar label="Iniciar sesión" labelEnviando="Entrando..." />
-      </form>
-
-      <div className="my-5 flex items-center gap-3">
-        <div className="h-px flex-1 bg-ink/10" />
-        <span className="text-xs text-ink/40">o</span>
-        <div className="h-px flex-1 bg-ink/10" />
-      </div>
-
-      <form action={iniciarSesionConGoogle}>
-        <input type="hidden" name="redirect" value={redirectTo} />
-        <button
-          type="submit"
-          className="flex w-full items-center justify-center gap-2 rounded-full border border-ink/15 bg-paper px-6 py-3 text-sm font-medium text-ink transition-colors hover:bg-card"
-        >
-          Continuar con Google
-        </button>
       </form>
 
       <p className="mt-6 text-center text-sm text-ink/60">
