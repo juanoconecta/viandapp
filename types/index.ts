@@ -356,9 +356,14 @@ export type Database = {
         Row: CrmContacto;
         Insert: Pick<CrmContacto, "tipo" | "fuente"> &
           Partial<
-            Omit<CrmContacto, "id" | "created_at" | "updated_at" | "tipo" | "fuente">
+            Omit<
+              CrmContacto,
+              "id" | "created_at" | "updated_at" | "tipo" | "fuente" | "contacto_normalizado"
+            >
           >;
-        Update: Partial<Omit<CrmContacto, "id" | "created_at" | "updated_at">>;
+        Update: Partial<
+          Omit<CrmContacto, "id" | "created_at" | "updated_at" | "contacto_normalizado">
+        >;
         Relationships: [];
       };
       crm_contacto_pedidos: {
