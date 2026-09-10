@@ -83,10 +83,11 @@ aplicación.
 ### Paso 5 — corrida real de `npm run test:integration` (Task 3, CRM)
 
 Ejecutado contra `viandapp-staging` el 2026-09-10. 3 archivos de test, 60
-casos: **59 pasaron, 1 falló**.
+casos: **60/60 pasaron** (ver corrección de test más abajo — un intento
+inicial reportó 1 falla por un defecto del test, no del esquema).
 
-- `app/admin/crm/sincronizacion.integration.test.ts`: 45 casos (44
-  pasaron, 1 falló). Cubre: alta de interesado/viandera como
+- `app/admin/crm/sincronizacion.integration.test.ts`: 45 casos, todos
+  pasaron. Cubre: alta de interesado/viandera como
   `cocina_potencial`/`cocina_activa`; no-duplicación bajo el índice único
   parcial que respalda el `ON CONFLICT` del trigger; backfill (recreación
   de un contacto faltante reproduciendo la precondición exacta, ya que
@@ -101,23 +102,28 @@ casos: **59 pasaron, 1 falló**.
   re-derivar en vivo sin un driver de Postgres nuevo ni una RPC de
   introspección nueva — se dan por satisfechas por la revisión estática ya
   hecha en la Task 2, que leyó el SQL aplicado byte a byte.
-  **1 caso falló, y es un hallazgo real, no un defecto del test**: insertar
-  un interesado como `anon` en `interesados_viandera` es rechazado con
-  42501 ("new row violates row-level security policy"). Diagnosticado por
-  descarte (con clientes reales, sin SQL crudo): `service_role` sí puede
-  insertar en esa misma tabla; `anon` sí puede leer `vianderas`/`viandas`
-  vía sus policies públicas de `select`. Esto acota el problema a que la
-  policy `"cualquiera puede anotarse como interesada"` (documentada en
-  `CLAUDE.md`, insert a `anon` con `check (true)`) no está aplicada en
-  `viandapp-staging` — consistente con que esa parte del esquema base se
-  reconstruyó a mano desde `CLAUDE.md` (ver el registro de arriba) en vez
-  de venir de un archivo de migración versionado. No es un defecto de la
-  migración de CRM (Task 2) ni de este harness de test; es un gap del
-  esquema base de este proyecto de staging, y bloquea hoy la vía real por
-  la que el formulario de la landing (que inserta como `anon`) daría de
-  alta interesadas ahí. Requiere que alguien con autorización aplique esa
-  policy en `viandapp-staging` (o confirme que el gap es aceptable) — no
-  se aplicó ninguna corrección de esquema como parte de esta tarea.
+
+  **Corrección post-implementación** (controller, mismo día): el caso
+  "insertar un interesado como `anon` crea un contacto `cocina_potencial`"
+  falló inicialmente con 42501 ("new row violates row-level security
+  policy"). El diagnóstico original (registrado brevemente acá y luego
+  corregido) concluía que a `viandapp-staging` le faltaba la policy base
+  `"cualquiera puede anotarse como interesada"` (insert a `anon`). Ese
+  diagnóstico era **incorrecto** — verificado con un POST crudo a la REST
+  API (sin el SDK) con la misma anon key: el insert solo, sin pedir
+  representación de vuelta, devuelve `201`. La causa real: el test
+  encadenaba `.insert(...).select().single()`, y `interesados_viandera`
+  no tiene (a propósito, ver `CLAUDE.md`: "sin policy de select para anon
+  a propósito") ninguna policy de `select` para `anon` — el `RETURNING`
+  implícito de `.select()` después del insert exige esa visibilidad bajo
+  RLS, y Postgres rechaza el insert entero por no poder satisfacerla,
+  aunque el insert en sí esté permitido. El código real de producción
+  (`app/(consumer)/actions.ts`) nunca encadena `.select()` ahí, por la
+  misma razón de diseño. Corregido quitando `.select()` del insert y
+  buscando el id creado después con el cliente `service_role` (que sí
+  puede leer la tabla), filtrando por el `contacto` único de esa corrida.
+  Sin cambios de esquema en `viandapp-staging` — la policy en cuestión
+  siempre estuvo ahí y siempre funcionó.
 - `app/admin/crm/consentimiento.integration.test.ts`: 8 casos, todos
   pasaron. Cubre: alta de consumidor y puente al aceptar marketing; no-alta
   al no aceptar; normalización de tres formatos de teléfono a un solo

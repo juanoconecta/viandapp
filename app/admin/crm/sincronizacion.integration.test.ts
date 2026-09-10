@@ -85,31 +85,41 @@ afterAll(async () => {
 });
 
 describe("sincronización CRM: interesados", () => {
-  // HALLAZGO (ver task-3-report.md): en viandapp-staging, este insert
-  // como anon falla hoy con 42501 ("new row violates row-level security
-  // policy for table interesados_viandera"). No es un bug de la migración
-  // de CRM (Task 2) ni de este test: es que la policy base "cualquiera
-  // puede anotarse como interesada" (CLAUDE.md, insert to anon with check
-  // true) no está aplicada en este proyecto de staging -- confirmado
-  // porque el insert con service_role sí funciona (ver el resto de este
-  // archivo) y porque las policies públicas de SELECT en vianderas/viandas
-  // sí funcionan para anon (probado aparte). Se deja el test tal cual,
-  // fallando de forma honesta, en vez de cambiarlo a service_role -- eso
-  // ocultaría que ahora mismo el formulario real de la landing (que
-  // inserta como anon) no podría dar de alta interesadas en este
-  // proyecto de staging.
+  // CORREGIDO (ver task-3-report.md para el diagnóstico original, erróneo):
+  // este test originalmente encadenaba `.select().single()` después del
+  // insert como anon, y fallaba con 42501. La causa real no era una policy
+  // de INSERT faltante -- esa sí existe y funciona (confirmado con un POST
+  // crudo sin `Prefer: return=representation`, que da 201) -- sino que
+  // `interesados_viandera` NO tiene policy de SELECT para anon, a
+  // propósito ("sin policy de select para anon a propósito", CLAUDE.md):
+  // los leads solo se leen desde el dashboard de Supabase. Un
+  // `insert(...).select()` le pide a Postgres el RETURNING de la fila
+  // recién insertada, lo cual bajo RLS exige también permiso de SELECT
+  // sobre esa fila -- inexistente para anon aquí -- así que Postgres
+  // rechaza el insert entero con la misma policy-violation aunque el
+  // INSERT en sí esté permitido. El código real de producción
+  // (`app/(consumer)/actions.ts`) nunca hace `.select()` después de este
+  // insert, por la misma razón. Este test ahora refleja exactamente ese
+  // patrón: inserta sin pedir representación, y busca el id creado
+  // después con el cliente admin (que sí puede leer la tabla), filtrando
+  // por el `contacto` único de esta corrida.
   it("insertar un interesado como anon crea un contacto cocina_potencial", async () => {
     const anon = crearClienteAnonimo();
-    const { data: interesado, error: errorInsert } = await anon
-      .from("interesados_viandera")
-      .insert({
-        nombre: `Interesada test ${SUFIJO}`,
-        contacto: `interesada-${SUFIJO}@viandapp-staging.invalid`,
-      })
-      .select()
-      .single();
+    const contactoUnico = `interesada-${SUFIJO}@viandapp-staging.invalid`;
+    const { error: errorInsert } = await anon.from("interesados_viandera").insert({
+      nombre: `Interesada test ${SUFIJO}`,
+      contacto: contactoUnico,
+    });
 
     expect(errorInsert).toBeNull();
+
+    const { data: interesado, error: errorLectura } = await admin
+      .from("interesados_viandera")
+      .select("id")
+      .eq("contacto", contactoUnico)
+      .single();
+
+    expect(errorLectura).toBeNull();
     expect(interesado).not.toBeNull();
     idsACrear.interesados.push(interesado!.id);
 
