@@ -124,7 +124,7 @@ inicial reportó 1 falla por un defecto del test, no del esquema).
   puede leer la tabla), filtrando por el `contacto` único de esa corrida.
   Sin cambios de esquema en `viandapp-staging` — la policy en cuestión
   siempre estuvo ahí y siempre funcionó.
-- `app/admin/crm/consentimiento.integration.test.ts`: 8 casos, todos
+- `app/admin/crm/consentimiento.integration.test.ts`: 7 casos, todos
   pasaron. Cubre: alta de consumidor y puente al aceptar marketing; no-alta
   al no aceptar; normalización de tres formatos de teléfono a un solo
   contacto con tres puentes; retiro de consentimiento (conserva
@@ -133,7 +133,7 @@ inicial reportó 1 falla por un defecto del test, no del esquema).
   vista `crm_contactos_resumen` no filtra nombre/contacto aunque el pedido
   en sí retenga su PII); alta de un contacto nuevo tras un consentimiento
   posterior a la anonimización, sin tocar la fila anónima anterior.
-- `app/admin/crm/normalizacion.integration.test.ts`: 7 casos, todos
+- `app/admin/crm/normalizacion.integration.test.ts`: 8 casos, todos
   pasaron. Confirma paridad exacta entre `crm_normalizar_contacto` (SQL,
   vivo en staging) y `normalizarContacto` (TypeScript, Task 1) para los 7
   casos de la tabla de test de Task 1.
