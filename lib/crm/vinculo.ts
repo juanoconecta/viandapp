@@ -15,71 +15,73 @@ export type ResultadoValidacion =
 
 export function validarVinculo(datos: DatosVinculo): ResultadoValidacion {
   // Constraint 1: crm_contactos_libre_o_vinculado
-  // At least one of: vianderaId, interesadoId, nombreLibre, or piiEliminada must be set/true
-  const tieneVianderaId = Boolean(datos.vianderaId);
-  const tieneInteresadoId = Boolean(datos.interesadoId);
-  const tieneNombreLibre = Boolean(datos.nombreLibre);
+  // Mirror SQL "IS NOT NULL" literalmente: una cadena vacía cuenta como
+  // presente, igual que en Postgres. Nunca usar coerción truthy acá.
+  const tieneVianderaId = datos.vianderaId != null;
+  const tieneInteresadoId = datos.interesadoId != null;
+  const tieneNombreLibre = datos.nombreLibre != null;
+  const tieneContactoLibre = datos.contactoLibre != null;
   const piiEliminada = datos.piiEliminada === true;
 
-  // Reject two FKs simultaneously
   if (tieneVianderaId && tieneInteresadoId) {
     return {
       ok: false,
-      mensaje: "No se pueden establecer dos FKs simultáneamente: especifique solo vianderaId o interesadoId",
+      mensaje: "Un contacto no puede estar vinculado a una viandera y a una interesada al mismo tiempo.",
     };
   }
 
-  // Check if we have at least one valid field per constraint 1
-  const tieneAlmenosUno = tieneVianderaId || tieneInteresadoId || tieneNombreLibre || piiEliminada;
-  if (!tieneAlmenosUno) {
+  const tieneAlMenosUno = tieneVianderaId || tieneInteresadoId || tieneNombreLibre || piiEliminada;
+  if (!tieneAlMenosUno) {
     return {
       ok: false,
-      mensaje: "El contacto debe tener al menos un vínculo: vianderaId, interesadoId, nombreLibre, o estar anonimizado",
+      mensaje: "El contacto necesita un vínculo: una viandera, una interesada, un nombre libre, o estar anonimizado.",
     };
   }
 
   // Constraint 2: crm_contactos_anonimizacion_consistente
-  // If piiEliminada = true, then tipo must be 'consumidor', no FKs, no nombreLibre, no contactoLibre, and consentimiento must be set
+  // Si piiEliminada = true, todo lo demás abajo debe cumplirse en conjunto
+  // (no es un "escape" alternativo): tipo consumidor, sin vínculos, sin
+  // nombre/contacto libres (IS NULL, no solo falsy) y consentimiento retirado.
   if (piiEliminada) {
     if (datos.tipo !== "consumidor") {
       return {
         ok: false,
-        mensaje: "Un contacto anonimizado solo puede ser de tipo 'consumidor'",
+        mensaje: "Solo un contacto de tipo consumidor puede anonimizarse.",
       };
     }
 
     if (tieneVianderaId) {
       return {
         ok: false,
-        mensaje: "Un contacto anonimizado no puede tener vianderaId",
+        mensaje: "Un contacto anonimizado no puede seguir vinculado a una viandera.",
       };
     }
 
     if (tieneInteresadoId) {
       return {
         ok: false,
-        mensaje: "Un contacto anonimizado no puede tener interesadoId",
+        mensaje: "Un contacto anonimizado no puede seguir vinculado a una interesada.",
       };
     }
 
     if (tieneNombreLibre) {
       return {
         ok: false,
-        mensaje: "Un contacto anonimizado no puede tener nombreLibre",
+        mensaje: "Un contacto anonimizado no puede conservar un nombre.",
       };
     }
 
-    if (datos.contactoLibre) {
+    if (tieneContactoLibre) {
       return {
         ok: false,
-        mensaje: "Un contacto anonimizado no puede tener contactoLibre",
+        mensaje: "Un contacto anonimizado no puede conservar un contacto.",
       };
     }
 
-    if (!datos.consentimientoRetiradoEn) {
+    if (datos.consentimientoRetiradoEn == null) {
       return {
         ok: false,
-        mensaje: "Un contacto anonimizado debe tener consentimiento retirado",
+        mensaje: "Un contacto anonimizado debe tener el consentimiento retirado.",
       };
     }
   }

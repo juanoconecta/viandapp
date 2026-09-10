@@ -38,7 +38,7 @@ describe("validarVinculo", () => {
     const resultado = validarVinculo(datos);
     expect(resultado.ok).toBe(false);
     if (!resultado.ok) {
-      expect(resultado.mensaje).toMatch(/dos|simultán|FK|ambas/i);
+      expect(resultado.mensaje).toMatch(/mismo tiempo|viandera y a una interesada/i);
     }
   });
 
@@ -52,6 +52,15 @@ describe("validarVinculo", () => {
     if (!resultado.ok) {
       expect(resultado.mensaje).toMatch(/nombre|vínculo/i);
     }
+  });
+
+  it("acepta nombreLibre en cadena vacía como vínculo válido (SQL: '' IS NOT NULL)", () => {
+    const datos: DatosVinculo = {
+      tipo: "consumidor",
+      nombreLibre: "",
+    };
+    const resultado = validarVinculo(datos);
+    expect(resultado.ok).toBe(true);
   });
 
   it("acepta fila anónima solo si tipo === 'consumidor', sin FK, sin nombre/contacto y con consentimiento retirado", () => {
@@ -146,14 +155,26 @@ describe("validarVinculo", () => {
     }
   });
 
-  it("acepta piiEliminada sin nombre cuando tipo === 'consumidor' y consentimiento está retirado", () => {
+  it("rechaza fila anónima si contactoLibre es cadena vacía (SQL: '' no es IS NULL)", () => {
     const datos: DatosVinculo = {
       tipo: "consumidor",
+      contactoLibre: "",
       piiEliminada: true,
       consentimientoRetiradoEn: "2026-09-10T00:00:00Z",
     };
     const resultado = validarVinculo(datos);
-    expect(resultado.ok).toBe(true);
+    expect(resultado.ok).toBe(false);
+  });
+
+  it("rechaza fila anónima si nombreLibre es cadena vacía (SQL: '' no es IS NULL)", () => {
+    const datos: DatosVinculo = {
+      tipo: "consumidor",
+      nombreLibre: "",
+      piiEliminada: true,
+      consentimientoRetiradoEn: "2026-09-10T00:00:00Z",
+    };
+    const resultado = validarVinculo(datos);
+    expect(resultado.ok).toBe(false);
   });
 
   it("acepta row con vianderaId y contactoLibre (FK principal + datos de contacto adicionales)", () => {
@@ -166,14 +187,12 @@ describe("validarVinculo", () => {
     expect(resultado.ok).toBe(true);
   });
 
-  it("rechaza fila sin ninguna entrada (ni FK, ni nombre, ni piiEliminada)", () => {
+  it("rechaza contactoLibre solo, sin FK/nombreLibre/piiEliminada (no es un vínculo válido)", () => {
     const datos: DatosVinculo = {
       tipo: "consumidor",
+      contactoLibre: "juan@example.com",
     };
     const resultado = validarVinculo(datos);
     expect(resultado.ok).toBe(false);
-    if (!resultado.ok) {
-      expect(resultado.mensaje).toMatch(/nombre|vínculo|libre/i);
-    }
   });
 });
