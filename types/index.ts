@@ -151,6 +151,100 @@ export type EventoAnalitica = {
   created_at: string;
 };
 
+export type TipoCrmContacto =
+  | "cocina_potencial"
+  | "cocina_activa"
+  | "consumidor"
+  | "aliado_estrategico"
+  | "otro";
+
+export type FuenteCrmContacto =
+  | "landing_interes"
+  | "explorador"
+  | "pedido"
+  | "referido"
+  | "contacto_directo"
+  | "otro";
+
+export type EstadoCrmContacto =
+  | "nuevo"
+  | "en_conversacion"
+  | "calificado"
+  | "activo"
+  | "inactivo"
+  | "descartado";
+
+export type TipoCrmInteraccion =
+  | "llamada"
+  | "whatsapp"
+  | "email"
+  | "reunion"
+  | "cambio_estado"
+  | "otro";
+
+export type CrmContacto = {
+  id: string;
+  tipo: TipoCrmContacto;
+  viandera_id: string | null;
+  interesado_id: string | null;
+  nombre_libre: string | null;
+  contacto_libre: string | null;
+  contacto_normalizado: string | null;
+  fuente: FuenteCrmContacto;
+  estado: EstadoCrmContacto;
+  etiquetas: string[];
+  consentimiento_retirado_en: string | null;
+  pii_eliminada: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmContactoResumen = {
+  id: string;
+  tipo: TipoCrmContacto;
+  fuente: FuenteCrmContacto;
+  estado: EstadoCrmContacto;
+  etiquetas: string[];
+  consentimiento_retirado_en: string | null;
+  pii_eliminada: boolean;
+  nombre: string | null;
+  contacto: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmNota = {
+  id: string;
+  contacto_id: string;
+  texto: string;
+  created_at: string;
+};
+
+export type CrmTarea = {
+  id: string;
+  contacto_id: string;
+  titulo: string;
+  vence_en: string | null;
+  completada: boolean;
+  completada_en: string | null;
+  created_at: string;
+};
+
+export type CrmInteraccion = {
+  id: string;
+  contacto_id: string;
+  tipo: TipoCrmInteraccion;
+  resumen: string;
+  metadata: JsonObject;
+  created_at: string;
+};
+
+export type CrmContactoPedido = {
+  contacto_id: string;
+  pedido_id: string;
+  created_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -258,8 +352,52 @@ export type Database = {
         Update: Partial<Omit<EventoAnalitica, "id" | "created_at">>;
         Relationships: [];
       };
+      crm_contactos: {
+        Row: CrmContacto;
+        Insert: Pick<CrmContacto, "tipo" | "fuente"> &
+          Partial<
+            Omit<CrmContacto, "id" | "created_at" | "updated_at" | "tipo" | "fuente">
+          >;
+        Update: Partial<Omit<CrmContacto, "id" | "created_at" | "updated_at">>;
+        Relationships: [];
+      };
+      crm_contacto_pedidos: {
+        Row: CrmContactoPedido;
+        Insert: Omit<CrmContactoPedido, "created_at"> &
+          Partial<Pick<CrmContactoPedido, "created_at">>;
+        Update: Partial<CrmContactoPedido>;
+        Relationships: [];
+      };
+      crm_notas: {
+        Row: CrmNota;
+        Insert: Omit<CrmNota, "id" | "created_at">;
+        Update: Partial<Omit<CrmNota, "id" | "created_at">>;
+        Relationships: [];
+      };
+      crm_tareas: {
+        Row: CrmTarea;
+        Insert: Omit<
+          CrmTarea,
+          "id" | "created_at" | "completada" | "completada_en" | "vence_en"
+        > &
+          Partial<Pick<CrmTarea, "completada" | "completada_en" | "vence_en">>;
+        Update: Partial<Omit<CrmTarea, "id" | "created_at">>;
+        Relationships: [];
+      };
+      crm_interacciones: {
+        Row: CrmInteraccion;
+        Insert: Omit<CrmInteraccion, "id" | "created_at" | "metadata"> &
+          Partial<Pick<CrmInteraccion, "metadata">>;
+        Update: Partial<Omit<CrmInteraccion, "id" | "created_at">>;
+        Relationships: [];
+      };
     };
-    Views: Record<string, never>;
+    Views: {
+      crm_contactos_resumen: {
+        Row: CrmContactoResumen;
+        Relationships: [];
+      };
+    };
     Functions: {
       crear_pedido_atomico: {
         Args: {
