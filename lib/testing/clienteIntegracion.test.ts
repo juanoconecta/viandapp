@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { crearClienteIntegracion } from "./clienteIntegracion";
+import { crearClienteAnonimo, crearClienteIntegracion } from "./clienteIntegracion";
 
 const entornoValido: NodeJS.ProcessEnv = {
   NODE_ENV: "test",
   INTEGRATION_SUPABASE_URL: "https://viandapp-staging.supabase.co",
   INTEGRATION_SUPABASE_SERVICE_ROLE_KEY: "staging-service-role-key",
+  INTEGRATION_SUPABASE_ANON_KEY: "staging-anon-key",
   INTEGRATION_ALLOW_REMOTE_DATABASE: "viandapp-staging",
   NEXT_PUBLIC_SUPABASE_URL: "https://viandapp-production.supabase.co",
 };
@@ -39,5 +40,47 @@ describe("crearClienteIntegracion", () => {
     ],
   ])("rechaza cuando %s", (_motivo, env, mensaje) => {
     expect(() => crearClienteIntegracion(env)).toThrow(mensaje);
+  });
+});
+
+describe("crearClienteAnonimo", () => {
+  it.each([
+    [
+      "falta la URL de integración",
+      { ...entornoValido, INTEGRATION_SUPABASE_URL: undefined },
+      "Faltan credenciales de integración.",
+    ],
+    [
+      "falta la service role key de integración",
+      { ...entornoValido, INTEGRATION_SUPABASE_SERVICE_ROLE_KEY: undefined },
+      "Faltan credenciales de integración.",
+    ],
+    [
+      "la URL de integración coincide con producción",
+      {
+        ...entornoValido,
+        INTEGRATION_SUPABASE_URL: entornoValido.NEXT_PUBLIC_SUPABASE_URL,
+      },
+      "La base de integración no puede ser producción.",
+    ],
+    [
+      "no se autorizó viandapp-staging",
+      {
+        ...entornoValido,
+        INTEGRATION_ALLOW_REMOTE_DATABASE: "otro-proyecto",
+      },
+      "Staging remoto no autorizado para tests.",
+    ],
+    [
+      "falta la anon key de integración",
+      { ...entornoValido, INTEGRATION_SUPABASE_ANON_KEY: undefined },
+      "Falta INTEGRATION_SUPABASE_ANON_KEY.",
+    ],
+  ])("rechaza cuando %s", (_motivo, env, mensaje) => {
+    expect(() => crearClienteAnonimo(env)).toThrow(mensaje);
+  });
+
+  it("construye un cliente sin lanzar cuando el entorno es válido", () => {
+    expect(() => crearClienteAnonimo(entornoValido)).not.toThrow();
   });
 });

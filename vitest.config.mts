@@ -18,6 +18,13 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["**/*.test.ts"],
+    // Los *.integration.test.ts hacen llamadas de red reales a
+    // viandapp-staging (ver vitest.integration.config.ts, que sí los
+    // incluye) y construyen su cliente de Supabase a nivel de módulo, que
+    // lanza si faltan las credenciales de integración. Sin excluirlos acá,
+    // `npm run test` (sin cargar .env.integration.local) rompe esos
+    // archivos por completo en vez de simplemente saltarlos.
+    exclude: ["**/node_modules/**", "**/*.integration.test.ts"],
     passWithNoTests: true,
   },
 });
