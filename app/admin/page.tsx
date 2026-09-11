@@ -25,7 +25,7 @@ export default async function AdminPage() {
 
   const admin = createAdminClient();
 
-  const [resumen, { count: pedidosRecientes }, { count: puniPendientes }] =
+  const [resumen, { count: pedidosRecientes }, { count: puniPendientes }, { data: vianderas }] =
     await Promise.all([
       obtenerResumenAdmin(),
       admin
@@ -36,6 +36,10 @@ export default async function AdminPage() {
         .from("puni_adhesiones")
         .select("id", { count: "exact", head: true })
         .eq("estado", "pendiente"),
+      admin
+        .from("vianderas")
+        .select("id, nombre, slug, user_id, created_at")
+        .order("created_at", { ascending: false }),
     ]);
 
   const tarjetas = [
@@ -86,6 +90,34 @@ export default async function AdminPage() {
         <div className="mt-4">
           <FormularioInvitar />
         </div>
+      </div>
+
+      <div className="mt-10">
+        <h2 className="font-display text-lg font-semibold text-ink">
+          Vianderas
+        </h2>
+        <ul className="mt-4 flex flex-col gap-2">
+          {(vianderas ?? []).map((v) => (
+            <li
+              key={v.id}
+              className="flex items-center justify-between rounded-xl border border-ink/10 bg-card px-4 py-3"
+            >
+              <div className="flex flex-col">
+                <span className="text-sm font-medium text-ink">{v.nombre}</span>
+                {v.slug && (
+                  <span className="text-xs text-ink/50">viandapp.ar/{v.slug}</span>
+                )}
+              </div>
+              <span
+                className={`text-xs font-medium ${
+                  v.user_id ? "text-teal-700" : "text-ink/40"
+                }`}
+              >
+                {v.user_id ? "Cuenta activa" : "Invitada, pendiente"}
+              </span>
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div className="mt-10">
