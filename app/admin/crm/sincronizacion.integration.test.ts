@@ -109,6 +109,9 @@ describe("sincronización CRM: interesados", () => {
     const { error: errorInsert } = await anon.from("interesados_viandera").insert({
       nombre: `Interesada test ${SUFIJO}`,
       contacto: contactoUnico,
+      zona: null,
+      instagram: null,
+      mensaje: null,
     });
 
     expect(errorInsert).toBeNull();
@@ -145,6 +148,9 @@ describe("sincronización CRM: interesados", () => {
       .insert({
         nombre: `Interesada dup test ${SUFIJO}`,
         contacto: `interesada-dup-${SUFIJO}@viandapp-staging.invalid`,
+        zona: null,
+        instagram: null,
+        mensaje: null,
       })
       .select()
       .single();
@@ -193,7 +199,16 @@ describe("sincronización CRM: vianderas", () => {
   it("una viandera nueva crea un contacto cocina_activa", async () => {
     const { data: viandera, error: errorInsert } = await admin
       .from("vianderas")
-      .insert({ nombre: `Viandera test ${SUFIJO}` })
+      .insert({
+        nombre: `Viandera test ${SUFIJO}`,
+        bio: null,
+        lat: null,
+        lng: null,
+        telefono: null,
+        activo: true,
+        user_id: null,
+        slug: null,
+      })
       .select()
       .single();
 
@@ -235,6 +250,9 @@ describe("sincronización CRM: backfill", () => {
       .insert({
         nombre: `Interesada backfill ${SUFIJO}`,
         contacto: `interesada-backfill-${SUFIJO}@viandapp-staging.invalid`,
+        zona: null,
+        instagram: null,
+        mensaje: null,
       })
       .select()
       .single();
@@ -277,7 +295,16 @@ describe("sincronización CRM: backfill", () => {
   it("la sentencia de backfill recrea el contacto faltante de una viandera existente", async () => {
     const { data: viandera } = await admin
       .from("vianderas")
-      .insert({ nombre: `Viandera backfill ${SUFIJO}` })
+      .insert({
+        nombre: `Viandera backfill ${SUFIJO}`,
+        bio: null,
+        lat: null,
+        lng: null,
+        telefono: null,
+        activo: true,
+        user_id: null,
+        slug: null,
+      })
       .select()
       .single();
     idsACrear.vianderas.push(viandera!.id);
@@ -356,7 +383,16 @@ describe("aislamiento RLS: anon y authenticated no acceden a ninguna tabla crm_*
 
     const { data: viandera } = await admin
       .from("vianderas")
-      .insert({ nombre: `Viandera RLS seed ${SUFIJO}` })
+      .insert({
+        nombre: `Viandera RLS seed ${SUFIJO}`,
+        bio: null,
+        lat: null,
+        lng: null,
+        telefono: null,
+        activo: true,
+        user_id: null,
+        slug: null,
+      })
       .select()
       .single();
     vianderaId = viandera!.id;

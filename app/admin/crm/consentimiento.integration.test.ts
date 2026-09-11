@@ -27,10 +27,13 @@ const admin = crearClienteIntegracion();
 // se apoya en nombre_libre (que sí lo lleva en todo contacto creado acá) y
 // en los ids trackeados explícitamente en idsACrear.
 function numeroUnico(sal: string): string {
+  // Números regulares alcanzan de sobra: hash siempre queda < 10_000_000_000
+  // por el módulo en cada paso, así que hash*131 nunca se acerca a
+  // Number.MAX_SAFE_INTEGER. No hace falta BigInt para este propósito.
   const texto = `${SUFIJO}:${sal}`;
-  let hash = 0n;
+  let hash = 0;
   for (const ch of texto) {
-    hash = (hash * 131n + BigInt(ch.charCodeAt(0))) % 10000000000n;
+    hash = (hash * 131 + ch.charCodeAt(0)) % 10000000000;
   }
   return hash.toString().padStart(10, "3");
 }
@@ -92,7 +95,16 @@ async function limpiarTodo() {
 beforeAll(async () => {
   const { data: viandera, error } = await admin
     .from("vianderas")
-    .insert({ nombre: `Viandera consentimiento test ${SUFIJO}` })
+    .insert({
+      nombre: `Viandera consentimiento test ${SUFIJO}`,
+      bio: null,
+      lat: null,
+      lng: null,
+      telefono: null,
+      activo: true,
+      user_id: null,
+      slug: null,
+    })
     .select()
     .single();
   if (error || !viandera) throw new Error(`no se pudo crear viandera de prueba: ${error?.message}`);

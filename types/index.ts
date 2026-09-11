@@ -422,6 +422,10 @@ export type Database = {
         Args: { p_clave: string; p_ventana_inicio: string };
         Returns: number;
       };
+      crm_normalizar_contacto: {
+        Args: { p_contacto_libre: string | null };
+        Returns: string | null;
+      };
     };
     CompositeTypes: {
       pedido_resultado: PedidoResultado;
