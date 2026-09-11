@@ -151,3 +151,59 @@ inspección del código de limpieza) que las 9 tablas relevantes
 `crm_interacciones`) volvieron a 0 filas después de la corrida, y que no
 quedó ningún usuario de Auth sintético (`*@viandapp-staging.invalid`)
 sin borrar.
+
+### Task 7 — QA integral (2026-09-11)
+
+**Paso 1 — verificación automatizada final**, contra el estado completo
+del plan de CRM (Tasks 0-6):
+
+```
+npm test               → 39 archivos, 409 tests, todos verdes
+npm run test:integration → 3 archivos, 60 tests, todos verdes (contra viandapp-staging real)
+npm run lint            → limpio
+npx tsc --noEmit        → limpio
+npm run build           → compiló sin errores, 20 rutas generadas
+```
+
+**Paso 2/3 — QA manual con usuario admin sintético**, contra
+`viandapp-staging` con un dev server local apuntado ahí (nunca
+producción; credenciales inyectadas por variables de entorno de shell,
+sin tocar `.env.local`). Un usuario admin sintético (invitación directa
+vía `admin.auth.admin.createUser`) y un usuario autenticado no-admin,
+ambos borrados al finalizar:
+
+- Estados vacíos verificados en `/admin`, `/admin/crm`, `/admin/pedidos`,
+  `/admin/puni`.
+- Redirección confirmada en las tres rutas (`/admin/crm`, `/admin/pedidos`,
+  `/admin/puni`) para: sin sesión (→ `/login`) y sesión no-admin (→ `/app`).
+- Con datos sintéticos (una viandera, una interesada, un pedido con
+  `acepta_marketing=true`): los tres triggers de sincronización
+  dispararon correctamente (`cocina_activa`, `cocina_potencial`,
+  `consumidor`); listado y detalle del CRM renderizaron los tres
+  contactos correctamente, incluida la insignia de consentimiento solo
+  para el consumidor.
+- Formularios probados de punta a punta: nota, tarea (+ completarla),
+  interacción, alta de "aliado_estrategico" vía "Nuevo aliado u otro
+  contacto" — los cuatro funcionaron y persistieron.
+- **Verificación de privacidad (la más crítica)**: se anonimizó el
+  contacto consumidor real — la vista y el listado pasaron a mostrar
+  "Contacto anónimo" / "Datos anonimizados" de inmediato, y se confirmó
+  por consulta directa a la base que el `pedido` subyacente **retiene**
+  `nombre_comprador`/`telefono_comprador` reales mientras que
+  `crm_contactos` quedó con `nombre_libre`/`contacto_libre` en `null` —
+  el aislamiento funciona de punta a punta, no solo a nivel de tests.
+  También se confirmó que una cocina (`cocina_activa`) no muestra ninguna
+  insignia de consentimiento ni los botones Retirar/Anonimizar.
+
+**Un hallazgo real corregido en esta etapa** (no un defecto de Task 6,
+una corrección de QA como prevé el propio Paso 4 del plan): la fecha de
+vencimiento de una tarea (`vence_en`, que viene de un `<input
+type="date">` sin hora y se guarda como medianoche UTC) se mostraba con
+un día de menos en el detalle del contacto, porque se formateaba en
+huso horario local (Argentina, UTC-3) en vez de UTC. Corregido con un
+formateador dedicado para ese campo (commit `626c609`); re-verificado
+visualmente en el mismo flujo tras el fix.
+
+Staging quedó limpio otra vez al finalizar esta corrida (mismo chequeo
+por conteo real + verificación de que no quedó ningún usuario de Auth
+sintético).
