@@ -68,6 +68,20 @@ function fechaCorta(iso: string): string {
   });
 }
 
+// vence_en es una fecha sin hora (viene de un <input type="date">) guardada
+// como medianoche UTC. Formatearla con la zona horaria local (como hace
+// fechaCorta) la corre un día para atrás en cualquier huso horario negativo
+// -- por eso acá se formatea en UTC y sin hora, que es lo único que el
+// formulario realmente capturó.
+function fechaSoloDia(iso: string): string {
+  return new Date(iso).toLocaleDateString("es-AR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 function SelectorEstado({
   contactoId,
   estadoActual,
@@ -291,7 +305,7 @@ export default function DetalleContacto({ detalle }: { detalle: DetalleContactoD
                 </p>
                 {tarea.vence_en && (
                   <p className="mt-1 text-xs text-ink/40">
-                    Vence: {fechaCorta(tarea.vence_en)}
+                    Vence: {fechaSoloDia(tarea.vence_en)}
                   </p>
                 )}
               </div>
