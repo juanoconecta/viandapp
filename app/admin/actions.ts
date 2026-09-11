@@ -138,6 +138,11 @@ export async function resolverAdhesionPuni(
     .eq("id", adhesionId);
   if (error) return { status: "error", mensaje: "No pudimos guardar el cambio." };
 
+  // La grilla de solicitudes vive ahora en /admin/puni (Task 5), y el
+  // contador "Puni pendientes" del tablero en /admin depende del mismo
+  // dato — revalidar ambas rutas, no solo la que existía antes de mover
+  // esta sección.
+  revalidatePath("/admin/puni");
   revalidatePath("/admin");
   return { status: "ok" };
 }
