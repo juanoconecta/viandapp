@@ -444,21 +444,21 @@ describe("completarTarea", () => {
 
     const resultado = await completarTarea(
       { status: "idle" },
-      formData({ tareaId: "t1", contactoId: "c1" }),
+      formData({ tareaId: "t1" }),
     );
 
     expect(resultado).toEqual({ status: "error", mensaje: "No autorizado." });
     expect(createAdminClient).not.toHaveBeenCalled();
   });
 
-  it("escribe completada=true y un timestamp de completada_en", async () => {
+  it("escribe completada=true, un timestamp de completada_en, y revalida con el contacto_id real de la tarea", async () => {
     comoAdmin();
-    const query = crearQueryFalsa({ data: null, error: null });
+    const query = crearQueryFalsa({ data: [{ contacto_id: "c1" }], error: null });
     mockearAdmin({ crm_tareas: query });
 
     const resultado = await completarTarea(
       { status: "idle" },
-      formData({ tareaId: "t1", contactoId: "c1" }),
+      formData({ tareaId: "t1" }),
     );
 
     expect(resultado).toEqual({ status: "ok" });
@@ -467,6 +467,20 @@ describe("completarTarea", () => {
     expect(typeof payload.completada_en).toBe("string");
     expect(query.eq).toHaveBeenCalledWith("id", "t1");
     expect(revalidatePath).toHaveBeenCalledWith("/admin/crm/c1");
+  });
+
+  it("no revalida un contacto inexistente si la tarea no existe", async () => {
+    comoAdmin();
+    const query = crearQueryFalsa({ data: [], error: null });
+    mockearAdmin({ crm_tareas: query });
+
+    const resultado = await completarTarea(
+      { status: "idle" },
+      formData({ tareaId: "inexistente" }),
+    );
+
+    expect(resultado).toEqual({ status: "error", mensaje: "No encontramos esa tarea." });
+    expect(revalidatePath).not.toHaveBeenCalledWith(expect.stringMatching(/^\/admin\/crm\//));
   });
 });
 

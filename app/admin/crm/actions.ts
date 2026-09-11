@@ -322,14 +322,14 @@ export async function completarTarea(
   if (!esAdmin(user?.email)) return { status: "error", mensaje: "No autorizado." };
 
   const tareaId = String(formData.get("tareaId") ?? "");
-  const contactoId = String(formData.get("contactoId") ?? "");
   if (!tareaId) return { status: "error", mensaje: "Faltan datos." };
 
   const admin = createAdminClient();
-  const { error } = await admin
+  const { data, error } = await admin
     .from("crm_tareas")
     .update({ completada: true, completada_en: new Date().toISOString() })
-    .eq("id", tareaId);
+    .eq("id", tareaId)
+    .select("contacto_id");
 
   if (error) {
     return {
@@ -337,10 +337,16 @@ export async function completarTarea(
       mensaje: "No pudimos completar la tarea. Probá de nuevo.",
     };
   }
+  if (!data || data.length === 0) {
+    return {
+      status: "error",
+      mensaje: "No encontramos esa tarea.",
+    };
+  }
 
   revalidatePath("/admin");
   revalidatePath("/admin/crm");
-  if (contactoId) revalidatePath(`/admin/crm/${contactoId}`);
+  revalidatePath(`/admin/crm/${data[0].contacto_id}`);
   return { status: "ok" };
 }
 
