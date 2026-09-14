@@ -2,13 +2,12 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { normalizarSlug } from "@/lib/viandera/slug";
-import { telefonoParaWhatsapp } from "@/lib/viandera/telefono";
 import StorefrontHeader from "@/components/storefront/StorefrontHeader";
 import PublicDishCard, {
   type PlatoStorefront,
 } from "@/components/storefront/PublicDishCard";
-import StickyContactBar from "@/components/storefront/StickyContactBar";
-import WhatsAppIntent from "@/components/storefront/WhatsAppIntent";
+import { CarritoProvider } from "@/components/carrito/CarritoProvider";
+import CajonCarrito from "@/components/carrito/CajonCarrito";
 import { adhesionesAprobadas } from "@/lib/envios/adhesionPublica";
 
 export async function generateMetadata({
@@ -37,24 +36,19 @@ export async function generateMetadata({
   };
 }
 
-type BusquedaParams = Record<string, string | string[] | undefined>;
-
 export default async function VianderaPublicaPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<BusquedaParams>;
 }) {
   const { slug } = await params;
-  const search = await searchParams;
   const slugNormalizado = normalizarSlug(slug);
   const supabase = await createClient();
 
   const { data: viandera, error: errorViandera } = await supabase
     .from("vianderas")
     .select(
-      "id, nombre, bio, telefono, barrio, ofrece_retiro, ofrece_envio, updated_at, activo",
+      "id, nombre, bio, telefono, barrio, ofrece_retiro, ofrece_envio, costo_envio_propio, updated_at, activo",
     )
     .eq("slug", slugNormalizado)
     .maybeSingle();
@@ -95,72 +89,44 @@ export default async function VianderaPublicaPage({
     etiquetas: plato.etiquetas,
   }));
 
-  // La selección de plato vive en la URL (`?plato=<id>`), no en estado de
-  // cliente. Un id inexistente o de un plato que dejó de estar disponible
-  // simplemente no matchea nada — se trata como "sin selección", nunca
-  // como error.
-  const platoIdSeleccionado =
-    typeof search.plato === "string" ? search.plato : null;
-  const platoSeleccionado =
-    platos.find((plato) => plato.id === platoIdSeleccionado) ?? null;
-
-  // Decide acá, no solo dentro de `WhatsAppIntent`, si hay algo que
-  // mostrar: así el borde/padding de `StickyContactBar` tampoco se
-  // renderiza cuando no hay un teléfono utilizable.
-  const hayTelefonoUtilizable = Boolean(
-    telefonoParaWhatsapp(viandera.telefono),
-  );
-
   return (
     <div className="mx-auto max-w-md px-4 py-10 sm:px-6">
-      <div className="rounded-3xl shadow-lg shadow-ink/5">
-        <div
-          className={`overflow-hidden rounded-t-3xl border border-ink/10 bg-card ${
-            hayTelefonoUtilizable ? "border-b-0" : "rounded-b-3xl"
-          }`}
-        >
-          <StorefrontHeader
-            nombre={viandera.nombre}
-            bio={viandera.bio}
-            barrio={viandera.barrio}
-            ofreceRetiro={viandera.ofrece_retiro}
-            ofreceEnvio={viandera.ofrece_envio}
-            actualizadoEn={viandera.updated_at}
-            adheridaAPuni={adhesionPuni}
-          />
-
-          {platos.length === 0 ? (
-            <p className="px-5 py-6 text-sm text-ink-muted">
-              Está preparando su próximo menú.
-            </p>
-          ) : (
-            <ul className="divide-y divide-ink/10">
-              {platos.map((plato) => (
-                <PublicDishCard
-                  key={plato.id}
-                  plato={plato}
-                  seleccionado={plato.id === platoSeleccionado?.id}
-                  hrefSeleccion={
-                    plato.id === platoSeleccionado?.id
-                      ? `/${slugNormalizado}`
-                      : `/${slugNormalizado}?plato=${plato.id}`
-                  }
-                />
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {hayTelefonoUtilizable && (
-          <StickyContactBar>
-            <WhatsAppIntent
-              telefono={viandera.telefono}
-              nombreViandera={viandera.nombre}
-              plato={platoSeleccionado}
+      <CarritoProvider>
+        <div className="rounded-3xl shadow-lg shadow-ink/5">
+          <div className="overflow-hidden rounded-3xl border border-ink/10 bg-card">
+            <StorefrontHeader
+              nombre={viandera.nombre}
+              bio={viandera.bio}
+              barrio={viandera.barrio}
+              ofreceRetiro={viandera.ofrece_retiro}
+              ofreceEnvio={viandera.ofrece_envio}
+              actualizadoEn={viandera.updated_at}
+              adheridaAPuni={adhesionPuni}
             />
-          </StickyContactBar>
-        )}
-      </div>
+
+            {platos.length === 0 ? (
+              <p className="px-5 py-6 text-sm text-ink-muted">
+                Está preparando su próximo menú.
+              </p>
+            ) : (
+              <ul className="divide-y divide-ink/10">
+                {platos.map((plato) => (
+                  <PublicDishCard
+                    key={plato.id}
+                    vianderaId={viandera.id}
+                    plato={plato}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+          <CajonCarrito
+            vianderaId={viandera.id}
+            nombreViandera={viandera.nombre}
+            platos={platos.map((plato) => ({ id: plato.id, nombre: plato.nombre, precio: plato.precio }))}
+          />
+        </div>
+      </CarritoProvider>
     </div>
   );
 }

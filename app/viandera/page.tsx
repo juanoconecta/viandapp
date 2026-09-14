@@ -49,12 +49,20 @@ export default async function VianderaDashboardPage() {
         <h2 className="font-display text-lg font-semibold text-ink">
           Tus platos
         </h2>
-        <Link
-          href="/viandera/platos/nuevo"
-          className="rounded-full bg-coral px-5 py-3 text-sm font-medium text-white shadow-sm transition-all hover:bg-coral-600 hover:shadow-md active:scale-95"
-        >
-          + Agregar plato
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/viandera/pedidos"
+            className="flex items-center px-1 py-3 text-sm font-medium text-ink/60 hover:text-coral"
+          >
+            Ver pedidos
+          </Link>
+          <Link
+            href="/viandera/platos/nuevo"
+            className="rounded-full bg-coral px-5 py-3 text-sm font-medium text-white shadow-sm transition-all hover:bg-coral-600 hover:shadow-md active:scale-95"
+          >
+            + Agregar plato
+          </Link>
+        </div>
       </div>
 
       {(platos ?? []).length === 0 ? (

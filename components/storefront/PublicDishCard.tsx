@@ -1,6 +1,6 @@
-import Link from "next/link";
 import type { TipoVianda } from "@/types";
 import { ETIQUETAS_DIETARIAS } from "@/lib/viandera/etiquetas";
+import BotonAgregarAlCarrito from "@/components/carrito/BotonAgregarAlCarrito";
 
 const TIPO_ETIQUETA: Record<string, string> = {
   almuerzo: "Almuerzo",
@@ -18,37 +18,15 @@ export type PlatoStorefront = {
   etiquetas: string[];
 };
 
-/**
- * La selección de plato vive en la URL (`?plato=<id>`), no en estado de
- * cliente — mismo patrón que los filtros de `/explorar`. Por eso esta
- * tarjeta puede ser un Server Component: es un `<Link>` que activa o
- * desactiva su propia selección al navegar (sin scroll-jump gracias a
- * `scroll={false}`), y `page.tsx` decide qué plato está seleccionado leyendo
- * `searchParams`.
- *
- * Sin `aria-current`: el href de una tarjeta seleccionada apunta a la URL
- * que la DESELECCIONA, así que ese destino no es "la ubicación actual" —
- * mismo criterio ya aplicado en `FilterChips`. El estado seleccionado se
- * comunica con texto `sr-only`.
- */
 export default function PublicDishCard({
+  vianderaId,
   plato,
-  seleccionado,
-  hrefSeleccion,
 }: {
+  vianderaId: string;
   plato: PlatoStorefront;
-  seleccionado: boolean;
-  hrefSeleccion: string;
 }) {
   return (
-    <li>
-      <Link
-        href={hrefSeleccion}
-        scroll={false}
-        className={`flex gap-3 px-5 py-3.5 transition-colors focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-teal ${
-          seleccionado ? "bg-soft-teal" : "hover:bg-soft-teal/40"
-        }`}
-      >
+    <li className="flex gap-3 px-5 py-4">
         {plato.fotoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -61,11 +39,10 @@ export default function PublicDishCard({
             Sin foto
           </div>
         )}
-        <div className="flex flex-1 items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="break-words text-sm font-medium text-ink">
               {plato.nombre}
-              {seleccionado && <span className="sr-only"> (seleccionado)</span>}
             </p>
             {plato.descripcion && (
               <p className="mt-0.5 text-xs text-ink-muted">
@@ -93,13 +70,11 @@ export default function PublicDishCard({
               </div>
             )}
           </div>
-          {plato.precio != null && (
-            <p className="whitespace-nowrap font-display text-sm font-semibold text-coral">
-              ${plato.precio.toLocaleString("es-AR")}
-            </p>
-          )}
+          <div className="flex flex-shrink-0 flex-col items-end gap-2">
+            {plato.precio != null && <p className="whitespace-nowrap font-display text-sm font-semibold text-coral">${plato.precio.toLocaleString("es-AR")}</p>}
+            {plato.precio != null && <BotonAgregarAlCarrito vianderaId={vianderaId} platoId={plato.id} nombre={plato.nombre} />}
+          </div>
         </div>
-      </Link>
     </li>
   );
 }

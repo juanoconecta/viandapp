@@ -9,6 +9,7 @@ import {
   transicionValida,
   type EstadoAdhesionPuni,
 } from "@/lib/envios/transiciones";
+import { ejecutarPurgado } from "@/lib/pedidos/servicioPurgado";
 
 export type EstadoInvitacion =
   | { status: "idle" }
@@ -137,6 +138,38 @@ export async function resolverAdhesionPuni(
     .eq("id", adhesionId);
   if (error) return { status: "error", mensaje: "No pudimos guardar el cambio." };
 
+  // La grilla de solicitudes vive ahora en /admin/puni (Task 5), y el
+  // contador "Puni pendientes" del tablero en /admin depende del mismo
+  // dato — revalidar ambas rutas, no solo la que existía antes de mover
+  // esta sección.
+  revalidatePath("/admin/puni");
   revalidatePath("/admin");
   return { status: "ok" };
+}
+
+export type ResultadoPurgarPedidos =
+  | { status: "idle" }
+  | { status: "error"; mensaje: string }
+  | { status: "ok"; mensaje: string };
+
+export async function purgarPedidosVencidos(
+  _prevState: ResultadoPurgarPedidos,
+  _formData: FormData,
+): Promise<ResultadoPurgarPedidos> {
+  void _prevState;
+  void _formData;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!esAdmin(user?.email)) return { status: "error", mensaje: "No autorizado." };
+
+  const resultado = await ejecutarPurgado();
+  if (!resultado.ok) return { status: "error", mensaje: resultado.error };
+
+  revalidatePath("/admin");
+  return {
+    status: "ok",
+    mensaje: `Se purgaron ${resultado.pedidosPurgados} pedidos y se limpiaron ${resultado.contadoresLimpiados} contadores del limitador.`,
+  };
 }

@@ -10,6 +10,7 @@ const RUTAS_RESERVADAS = new Set([
   "viandera",
   "api",
   "explorar",
+  "pedido",
 ]);
 
 export function normalizarSlug(valor: string): string {

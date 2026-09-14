@@ -42,6 +42,10 @@ describe("esSlugReservado", () => {
     expect(esSlugReservado("explorar")).toBe(true);
   });
 
+  it("reconoce 'pedido' como reservada", () => {
+    expect(esSlugReservado("pedido")).toBe(true);
+  });
+
   it("no marca como reservado un slug real de viandera", () => {
     expect(esSlugReservado("dona-rosa")).toBe(false);
   });

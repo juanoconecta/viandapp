@@ -1,0 +1,3 @@
+{
+  "crons": [{ "path": "/api/cron/purgar-pedidos", "schedule": "0 6 * * *" }]
+}
