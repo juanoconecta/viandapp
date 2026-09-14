@@ -13,6 +13,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["**/*.integration.test.ts"],
+    exclude: ["**/node_modules/**", "**/.worktrees/**"],
     fileParallelism: false,
     passWithNoTests: true,
     testTimeout: 30_000,

@@ -24,7 +24,7 @@ export default defineConfig({
     // lanza si faltan las credenciales de integración. Sin excluirlos acá,
     // `npm run test` (sin cargar .env.integration.local) rompe esos
     // archivos por completo en vez de simplemente saltarlos.
-    exclude: ["**/node_modules/**", "**/*.integration.test.ts"],
+    exclude: ["**/node_modules/**", "**/*.integration.test.ts", "**/.worktrees/**"],
     passWithNoTests: true,
   },
 });
