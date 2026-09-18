@@ -31,9 +31,17 @@ export default function FormularioLogin({ redirectTo }: { redirectTo: string }) 
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="password" className="text-sm font-medium text-ink/80">
-            Contraseña
-          </label>
+          <div className="flex items-baseline justify-between">
+            <label htmlFor="password" className="text-sm font-medium text-ink/80">
+              Contraseña
+            </label>
+            <Link
+              href="/auth/recuperar"
+              className="text-xs font-medium text-coral hover:text-coral-600"
+            >
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </div>
           <input
             id="password"
             name="password"

@@ -24,6 +24,12 @@ export default async function LoginPage({
         </p>
       )}
 
+      {params.error === "recovery" && (
+        <p className="mt-4 text-center text-sm text-coral-700">
+          Ese link de recuperación ya no es válido. Pedí uno nuevo.
+        </p>
+      )}
+
       <div className="mt-8">
         <FormularioLogin redirectTo={redirectTo} />
       </div>

@@ -81,6 +81,96 @@ export async function registrarse(
   redirect("/app");
 }
 
+export async function solicitarRecuperacion(
+  _prevState: EstadoAuth,
+  formData: FormData,
+): Promise<EstadoAuth> {
+  const email = String(formData.get("email") ?? "").trim();
+
+  if (!email) {
+    return { status: "error", mensaje: "Completá tu email." };
+  }
+
+  const supabase = await createClient();
+
+  // La plantilla de mail de recuperación (Supabase Dashboard) apunta a
+  // /auth/confirm con el token, no a este redirectTo — igual lo pasamos
+  // por si algún día se vuelve a usar la plantilla default de Supabase.
+  await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${await resolverOrigin()}/auth/actualizar-contrasena`,
+  });
+
+  // Mensaje siempre igual, exista o no la cuenta: evita que este formulario
+  // se pueda usar para detectar qué emails están registrados.
+  return {
+    status: "verificar",
+    mensaje:
+      "Si existe una cuenta con ese email, te mandamos un link para restablecer tu contraseña.",
+  };
+}
+
+export async function actualizarContrasena(
+  _prevState: EstadoAuth,
+  formData: FormData,
+): Promise<EstadoAuth> {
+  const password = String(formData.get("password") ?? "");
+  const repetirPassword = String(formData.get("repetirPassword") ?? "");
+
+  if (!password || !repetirPassword) {
+    return { status: "error", mensaje: "Completá los dos campos." };
+  }
+
+  if (password.length < 6) {
+    return {
+      status: "error",
+      mensaje: "La contraseña tiene que tener al menos 6 caracteres.",
+    };
+  }
+
+  if (password !== repetirPassword) {
+    return { status: "error", mensaje: "Las contraseñas no coinciden." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    return {
+      status: "error",
+      mensaje: "No pudimos actualizar tu contraseña. Pedí un link nuevo e intentá de nuevo.",
+    };
+  }
+
+  redirect("/app");
+}
+
+export async function confirmarRecuperacion(
+  _prevState: EstadoAuth,
+  formData: FormData,
+): Promise<EstadoAuth> {
+  const tokenHash = String(formData.get("tokenHash") ?? "");
+  const redirectTo = sanitizarRedirect(String(formData.get("redirect") ?? "/auth/actualizar-contrasena"));
+
+  if (!tokenHash) {
+    return { status: "error", mensaje: "Este link de recuperación no es válido." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.verifyOtp({
+    type: "recovery",
+    token_hash: tokenHash,
+  });
+
+  if (error) {
+    return {
+      status: "error",
+      mensaje: "Este link ya venció o ya fue usado. Pedí uno nuevo.",
+    };
+  }
+
+  redirect(redirectTo);
+}
+
 export async function cerrarSesion() {
   const supabase = await createClient();
   await supabase.auth.signOut();
